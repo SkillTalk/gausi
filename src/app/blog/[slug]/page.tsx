@@ -2,6 +2,7 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { blogPosts } from '@/content/content';
 import { formatDate } from '@/lib/utils';
+import type { ReactNode } from 'react';
 
 type Props = { params: { slug: string } };
 
@@ -21,7 +22,7 @@ export function generateMetadata({ params }: Props): Metadata {
 function renderContent(content: string) {
   // very lightweight rendering: paragraphs + simple lists
   const lines = content.split('\\n');
-  const elements: JSX.Element[] = [];
+  const elements: ReactNode[] = [];
   let listBuffer: string[] = [];
   lines.forEach((line, idx) => {
     if (line.trim().startsWith('- ')) {

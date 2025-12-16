@@ -39,7 +39,7 @@ export const siteConfig = {
     'SEO & Growth Marketing for Small Businesses.',
     'Simple strategies. Real results.'
   ],
-  url: 'https://www.gausidigital.com', // placeholder
+  url: 'https://gausidigital.com', // live domain
   ogImage: '/og-image.svg',
   contact: {
     email: 'hello@gausidigital.com',

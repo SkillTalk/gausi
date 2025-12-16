@@ -11,7 +11,8 @@ export async function POST(request: Request) {
     // Placeholder: log to server console. Replace with email integration.
     console.log('[FREE AUDIT REQUEST]', body);
     return NextResponse.json({ message: 'Audit request received. We will email you soon.' });
-  } catch (err) {
+  } catch (error) {
+    console.error('[FREE AUDIT ERROR]', error);
     return NextResponse.json({ message: 'Invalid request.' }, { status: 400 });
   }
 }

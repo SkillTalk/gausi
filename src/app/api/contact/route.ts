@@ -11,7 +11,8 @@ export async function POST(request: Request) {
     // Placeholder: log to server console. Replace with Nodemailer or email service.
     console.log('[CONTACT FORM]', body);
     return NextResponse.json({ message: 'Message received. We will get back to you soon.' });
-  } catch (err) {
+  } catch (error) {
+    console.error('[CONTACT ERROR]', error);
     return NextResponse.json({ message: 'Invalid request.' }, { status: 400 });
   }
 }

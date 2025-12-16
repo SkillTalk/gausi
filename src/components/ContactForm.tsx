@@ -30,7 +30,8 @@ export function ContactForm() {
       const data = await res.json();
       setStatus({ ok: res.ok, msg: data.message || (res.ok ? 'Message sent.' : 'Something went wrong.') });
       if (res.ok) setForm({ name: '', email: '', phone: '', service: '', message: '' });
-    } catch (err) {
+    } catch (error) {
+      console.error('[CONTACT FORM ERROR]', error);
       setStatus({ ok: false, msg: 'Network error.' });
     } finally {
       setLoading(false);

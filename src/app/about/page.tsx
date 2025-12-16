@@ -1,5 +1,4 @@
 import { Metadata } from 'next';
-import { siteConfig } from '@/content/content';
 import { SectionHeading } from '@/components/SectionHeading';
 import { CTABanner } from '@/components/CTABanner';
 

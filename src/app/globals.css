@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0B1220;
+  --foreground: #ffffff;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  color: var(--foreground);
+  background: radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,0.12), transparent 60%),
+              radial-gradient(900px 500px at 90% 10%, rgba(29,78,216,0.18), transparent 60%),
+              #0B1220;
+}
+
+.container {
+  @apply mx-auto max-w-container px-4 sm:px-6 lg:px-8;
+}
+
+.card {
+  @apply bg-navy-800/60 backdrop-blur rounded-xl border border-white/5 shadow-card;
+}
+
+.heading-gradient {
+  background: linear-gradient(90deg, #93C5FD 0%, #60A5FA 35%, #22D3EE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+}
+
+.btn {
+  @apply inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900;
+}
+.btn-primary {
+  @apply btn bg-electric-600 text-white hover:bg-electric-700 focus-visible:ring-electric-600;
+}
+.btn-secondary {
+  @apply btn bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/30;
+}
+
+.prose p {
+  @apply mb-4 leading-relaxed text-white/90;
+}
+.prose h2, .prose h3 {
+  @apply mt-8 mb-3 font-semibold text-white;
+}
+.prose ul {
+  @apply list-disc pl-5 space-y-1 mb-4 text-white/90;
+}
+
+

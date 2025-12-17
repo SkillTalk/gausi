@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import type { Route } from 'next';
 import { Service } from '@/content/content';
 
 export function ServiceCard({ service }: { service: Service }) {
@@ -16,7 +17,7 @@ export function ServiceCard({ service }: { service: Service }) {
       </ul>
       <div className="mt-5 flex items-center justify-between text-sm">
         <span className="text-white/70">{service.startingPrice}</span>
-        <Link href={`/services/${service.slug}`} className="text-electric-400 hover:text-electric-300">
+        <Link href={`/services/${service.slug}` as Route} className="text-electric-400 hover:text-electric-300">
           Learn more →
         </Link>
       </div>

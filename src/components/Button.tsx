@@ -1,9 +1,9 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 type ButtonProps = {
-  href?: string;
+  href?: ComponentProps<typeof Link>['href'];
   type?: 'button' | 'submit' | 'reset';
   variant?: 'primary' | 'secondary';
   children: ReactNode;

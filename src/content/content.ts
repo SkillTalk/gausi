@@ -1,3 +1,4 @@
+import type { Route } from 'next';
 export type Service = {
   slug: string;
   title: string;
@@ -51,15 +52,15 @@ export const siteConfig = {
     linkedin: '#'
   },
   nav: [
-    { href: '/', label: 'Home' },
-    { href: '/services', label: 'Services' },
-    { href: '/case-studies', label: 'Case Studies' },
-    { href: '/blog', label: 'Blog' },
-    { href: '/about', label: 'About' }
+    { href: '/' as Route, label: 'Home' },
+    { href: '/services' as Route, label: 'Services' },
+    { href: '/case-studies' as Route, label: 'Case Studies' },
+    { href: '/blog' as Route, label: 'Blog' },
+    { href: '/about' as Route, label: 'About' }
   ],
   cta: {
-    primary: { href: '/free-audit', label: 'Get a Free Audit' },
-    secondary: { href: '/contact', label: 'Book a Call' }
+    primary: { href: '/free-audit' as Route, label: 'Get a Free Audit' },
+    secondary: { href: '/contact' as Route, label: 'Book a Call' }
   },
   stats: [
     { label: 'Audits delivered', value: '30+' },

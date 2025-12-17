@@ -32,13 +32,13 @@ export type BlogPost = {
 
 export const siteConfig = {
   name: 'Gausi Digital Marketing',
-  taglineMain: 'Gausi Digital Marketing — SEO that brings real customers.',
+  taglineMain: 'AI-powered growth systems engineered for predictable results.',
   subtext:
-    'We help startups and local businesses grow with SEO, content, and performance marketing. Practical, transparent, and results-focused.',
+    'We deploy machine-assisted SEO, intelligent content, and automated acquisition workflows. Designed for speed, clarity, and measurable growth.',
   taglines: [
-    'Rank Higher. Grow Faster.',
-    'SEO & Growth Marketing for Small Businesses.',
-    'Simple strategies. Real results.'
+    'AI-driven. Outcome-focused.',
+    'Predictive growth, not guesswork.',
+    'Automated workflows. Smarter ranking systems.'
   ],
   url: 'https://gausidigital.com', // live domain
   ogImage: '/og-image.svg',
@@ -59,8 +59,8 @@ export const siteConfig = {
     { href: '/about' as Route, label: 'About' }
   ],
   cta: {
-    primary: { href: '/free-audit' as Route, label: 'Get a Free Audit' },
-    secondary: { href: '/contact' as Route, label: 'Book a Call' }
+    primary: { href: '/free-audit' as Route, label: 'Run AI Audit' },
+    secondary: { href: '/contact' as Route, label: 'Activate Growth Engine' }
   },
   stats: [
     { label: 'Audits delivered', value: '30+' },

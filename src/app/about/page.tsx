@@ -14,7 +14,7 @@ export default function AboutPage() {
         <SectionHeading title="Our Story" subtitle="Gausi — clarity and growth." />
         <div className="prose max-w-3xl mx-auto">
           <p>
-             Digital Marketing helps startups and local businesses grow with simple, transparent SEO and growth marketing.
+            Gausi Digital Marketing helps startups and local businesses grow with simple, transparent SEO and growth marketing.
           </p>
           <p>
             “Gausi” represents focus and discipline — we prioritize clarity, practical steps, and consistent execution over fluff.

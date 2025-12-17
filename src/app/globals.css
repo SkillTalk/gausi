@@ -13,9 +13,10 @@ html, body {
 
 body {
   color: var(--foreground);
-  background: radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,0.12), transparent 60%),
-              radial-gradient(900px 500px at 90% 10%, rgba(29,78,216,0.18), transparent 60%),
-              #0B1220;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(99,102,241,0.15), transparent 60%),
+    radial-gradient(900px 500px at 90% 10%, rgba(34,211,238,0.18), transparent 60%),
+    #0B1220;
 }
 
 .container {
@@ -23,11 +24,11 @@ body {
 }
 
 .card {
-  @apply bg-navy-800/60 backdrop-blur rounded-xl border border-white/5 shadow-card;
+  @apply bg-navy-800/50 backdrop-blur rounded-xl border border-white/10 shadow-card;
 }
 
 .heading-gradient {
-  background: linear-gradient(90deg, #93C5FD 0%, #60A5FA 35%, #22D3EE 100%);
+  background: linear-gradient(90deg, #60A5FA 0%, #8B5CF6 50%, #22D3EE 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -38,10 +39,10 @@ body {
   @apply inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900;
 }
 .btn-primary {
-  @apply btn bg-electric-600 text-white hover:bg-electric-700 focus-visible:ring-electric-600;
+  @apply btn bg-electric-600 text-white hover:bg-electric-700 focus-visible:ring-electric-600 border border-white/10 shadow-[0_0_0_0_rgba(34,211,238,0)] hover:shadow-[0_0_24px_0_rgba(34,211,238,0.4)] transition-shadow;
 }
 .btn-secondary {
-  @apply btn bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/30;
+  @apply btn bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/30 border border-white/10;
 }
 
 .prose p {
@@ -52,6 +53,21 @@ body {
 }
 .prose ul {
   @apply list-disc pl-5 space-y-1 mb-4 text-white/90;
+}
+
+/* Glass + glow helpers */
+.glass {
+  @apply bg-white/5 backdrop-blur border border-white/10;
+}
+.glow-border {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.25), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+/* Animated gradient utility */
+.animated-gradient {
+  background-image: linear-gradient(270deg, rgba(99,102,241,.25), rgba(34,211,238,.3), rgba(139,92,246,.25));
+  background-size: 200% 200%;
+  animation: gradient-x 12s ease infinite;
 }
 
 

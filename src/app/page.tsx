@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { Metadata } from 'next';
 import { siteConfig, services as servicesData } from '@/content/content';
 import { Button } from '@/components/Button';
@@ -8,6 +7,9 @@ import { TestimonialCard } from '@/components/TestimonialCard';
 import { CTABanner } from '@/components/CTABanner';
 import { Stats } from '@/components/Stats';
 import { ProcessSteps } from '@/components/ProcessSteps';
+import { RotatingWords } from '@/components/RotatingWords';
+import { MotionSection } from '@/components/MotionSection';
+import { Counter } from '@/components/Counter';
 
 export const metadata: Metadata = {
   title: 'Home',
@@ -25,36 +27,47 @@ export default function HomePage() {
   return (
     <>
       <section className="container pt-14 md:pt-20">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-          <div>
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight">
-              {siteConfig.taglineMain}
-            </h1>
-            <p className="mt-4 text-white/80 max-w-2xl">{siteConfig.subtext}</p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button href={siteConfig.cta.primary.href}>{siteConfig.cta.primary.label}</Button>
-              <Button href={siteConfig.cta.secondary.href} variant="secondary">
-                {siteConfig.cta.secondary.label}
-              </Button>
+        <MotionSection>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+            <div>
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-semibold tracking-tight">
+                {siteConfig.taglineMain}
+              </h1>
+              <p className="mt-4 text-white/80 max-w-2xl">
+                {siteConfig.subtext} <RotatingWords words={['SEO', 'Growth', 'Automation', 'AI']} />
+              </p>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Button href={siteConfig.cta.primary.href}>{siteConfig.cta.primary.label}</Button>
+                <Button href={siteConfig.cta.secondary.href} variant="secondary">
+                  {siteConfig.cta.secondary.label}
+                </Button>
+              </div>
+              <div className="mt-6 flex items-center gap-3 text-sm text-white/60">
+                {siteConfig.taglines.map((t) => (
+                  <span key={t} className="inline-flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-electric-500" />
+                    {t}
+                  </span>
+                ))}
+              </div>
             </div>
-            <div className="mt-6 flex items-center gap-3 text-sm text-white/60">
-              {siteConfig.taglines.map((t) => (
-                <span key={t} className="inline-flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-electric-500" />
-                  {t}
-                </span>
-              ))}
+            <div className="relative">
+              <div className="card p-6 animated-gradient h-64 md:h-80 flex items-center justify-center rounded-xl">
+                <div className="text-center">
+                  <div className="text-white/80">Predictive Growth Engine</div>
+                  <div className="mt-2 text-sm text-white/60">AI workflows orchestrating SEO + content + links</div>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="relative">
-            <div className="card p-6">
-              <Image src="/hero-placeholder.svg" alt="Marketing growth" width={640} height={420} className="w-full h-auto" />
-            </div>
+        </MotionSection>
+        <MotionSection delay={0.1}>
+          <div className="mt-10 grid grid-cols-3 gap-4 text-center">
+            <div className="card p-5"><div className="text-2xl font-semibold"><Counter to={30} />+</div><div className="text-white/70 text-sm mt-1">AI Audits</div></div>
+            <div className="card p-5"><div className="text-2xl font-semibold">90‑day</div><div className="text-white/70 text-sm mt-1">Predictive plan</div></div>
+            <div className="card p-5"><div className="text-2xl font-semibold"><Counter to={92} />%</div><div className="text-white/70 text-sm mt-1">Retention</div></div>
           </div>
-        </div>
-        <div className="mt-10">
-          <Stats items={siteConfig.stats} />
-        </div>
+        </MotionSection>
       </section>
 
       <section className="container mt-20">
@@ -67,14 +80,14 @@ export default function HomePage() {
       </section>
 
       <section className="container mt-20">
-        <SectionHeading title="Why Gausidhi" subtitle="Simple strategies. Real results." />
+        <SectionHeading title="Why Gausi (AI)" subtitle="Machine-assisted strategy. Predictable outcomes." />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {[
-            { title: 'Proven 90-day plan', desc: 'Focused execution with clear weekly deliverables.' },
-            { title: 'Transparent reporting', desc: 'Know exactly what’s shipped and what’s next.' },
-            { title: 'Built for small teams', desc: 'No fluff—just practical SEO and growth.' }
+            { title: 'AI-first roadmap', desc: '90‑day predictive plan generated from your data.' },
+            { title: 'Transparent telemetry', desc: 'Live reporting on what shipped and what moved.' },
+            { title: 'Automation built-in', desc: 'Systemized briefs, on-page, and internal links.' }
           ].map((b) => (
-            <div key={b.title} className="card p-6">
+            <div key={b.title} className="card p-6 hover:translate-y-[-3px] hover:shadow-[0_0_24px_rgba(99,102,241,0.35)] transition">
               <div className="text-lg font-semibold">{b.title}</div>
               <p className="mt-2 text-white/80">{b.desc}</p>
             </div>

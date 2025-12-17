@@ -1,16 +1,11 @@
-\"use client\";
+'use client';
 import Link from 'next/link';
 import type { Route } from 'next';
 import { Service } from '@/content/content';
-import { motion } from 'framer-motion';
 
 export function ServiceCard({ service }: { service: Service }) {
   return (
-    <motion.div
-      className="card p-6 transition"
-      whileHover={{ y: -4, boxShadow: '0 0 24px rgba(99,102,241,0.35)' }}
-      transition={{ type: 'spring', stiffness: 260, damping: 18 }}
-    >
+    <div className="card p-6 transition hover:-translate-y-[4px] hover:shadow-[0_0_24px_rgba(99,102,241,0.35)]">
       <h3 className="text-lg font-semibold">{service.title}</h3>
       <p className="mt-2 text-white/80">{service.short}</p>
       <ul className="mt-4 space-y-1 text-white/80">
@@ -27,7 +22,7 @@ export function ServiceCard({ service }: { service: Service }) {
           Learn more →
         </Link>
       </div>
-    </motion.div>
+    </div>
   );
 }
 

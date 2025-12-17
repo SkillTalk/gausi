@@ -5,7 +5,6 @@ import { SectionHeading } from '@/components/SectionHeading';
 import { ServiceCard } from '@/components/ServiceCard';
 import { TestimonialCard } from '@/components/TestimonialCard';
 import { CTABanner } from '@/components/CTABanner';
-import { Stats } from '@/components/Stats';
 import { ProcessSteps } from '@/components/ProcessSteps';
 import { RotatingWords } from '@/components/RotatingWords';
 import { MotionSection } from '@/components/MotionSection';

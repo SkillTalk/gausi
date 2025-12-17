@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateContact } from '@/lib/validators';
+import { sendEmail } from '@/lib/email';
 
 export async function POST(request: Request) {
   try {
@@ -8,8 +9,10 @@ export async function POST(request: Request) {
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ message: 'Validation failed', errors }, { status: 400 });
     }
-    // Placeholder: log to server console. Replace with Nodemailer or email service.
-    console.log('[CONTACT FORM]', body);
+    // Email (fallback to console if not configured)
+    const subject = `Contact: ${body.name} — ${body.service || 'General'}`;
+    const text = `Name: ${body.name}\nEmail: ${body.email}\nPhone: ${body.phone || '-'}\nService: ${body.service || '-'}\n\nMessage:\n${body.message}`;
+    await sendEmail({ subject, text });
     return NextResponse.json({ message: 'Message received. We will get back to you soon.' });
   } catch (error) {
     console.error('[CONTACT ERROR]', error);

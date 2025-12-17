@@ -38,17 +38,32 @@ All editable copy and data is centralized in:
 - `blogPosts`: 5 starter posts (title, date, excerpt, content)
 
 ## Email & Forms
-Forms post to API routes and log submissions to the server console (placeholders):
-- `src/app/api/contact/route.ts`
-- `src/app/api/audit/route.ts`
+Forms post to API routes. Nodemailer is integrated with safe fallbacks:
+- `src/lib/email.ts` handles SMTP email (fallbacks to console when not configured)
+- `src/app/api/contact/route.ts` and `src/app/api/audit/route.ts` call `sendEmail`
 
-Replace the `console.log` with your email provider or Nodemailer integration.
+Configure SMTP via environment variables (create `.env.local`):
+```
+EMAIL_HOST=smtp.yourhost.com
+EMAIL_PORT=587
+EMAIL_USER=your_smtp_user
+EMAIL_PASS=your_smtp_password
+EMAIL_FROM=Gausi Digital <no-reply@gausidigital.com>
+EMAIL_TO=hello@gausidigital.com
+```
 
 ## SEO
 - Per-page `metadata` for title/description/OG/Twitter
 - Organization JSON-LD on all pages (in `layout.tsx`)
 - LocalBusiness JSON-LD on Contact page
 - `src/app/robots.ts` and `src/app/sitemap.ts`
+
+## Analytics (GA4)
+Add your GA4 Measurement ID to `.env.local`:
+```
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+```
+The `Analytics` component automatically tracks route changes.
 
 ## Deploy (Vercel)
 1) Push this repo to GitHub

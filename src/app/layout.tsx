@@ -7,6 +7,7 @@ import { FloatingWhatsApp } from '@/components/FloatingWhatsApp';
 import { StickyAuditCTA } from '@/components/StickyAuditCTA';
 import { siteConfig } from '@/content/content';
 import { PageTransition } from '@/components/PageTransition';
+import { Analytics } from '@/components/Analytics';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -55,6 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className={inter.className}>
+        <Analytics />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgLd) }}

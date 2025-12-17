@@ -9,11 +9,12 @@ export async function POST(request: Request) {
     if (Object.keys(errors).length > 0) {
       return NextResponse.json({ message: 'Validation failed', errors }, { status: 400 });
     }
-    // Email (fallback to console if not configured)
+    // Log payload (no external email library)
     const subject = `Contact: ${body.name} — ${body.service || 'General'}`;
     const text = `Name: ${body.name}\nEmail: ${body.email}\nPhone: ${body.phone || '-'}\nService: ${body.service || '-'}\n\nMessage:\n${body.message}`;
-    await sendEmail({ subject, text });
-    return NextResponse.json({ message: 'Message received. We will get back to you soon.' });
+    await sendEmail({ subject, text }); // logs only
+    console.log('[CONTACT FORM]', body);
+    return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('[CONTACT ERROR]', error);
     return NextResponse.json({ message: 'Invalid request.' }, { status: 400 });

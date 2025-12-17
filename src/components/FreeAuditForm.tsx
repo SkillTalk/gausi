@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { validateAudit } from '@/lib/validators';
 import { Button } from '@/components/Button';
+import { AnimatePresence, motion } from 'framer-motion';
 
 export function FreeAuditForm() {
   const [form, setForm] = useState({ name: '', email: '', website: '', goals: '' });
@@ -80,11 +81,22 @@ export function FreeAuditForm() {
         </div>
       </div>
       <div className="mt-5">
-        <Button type="submit">{loading ? 'Submitting…' : 'Request Audit'}</Button>
+        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="inline-block">
+          <Button type="submit">{loading ? 'Submitting…' : 'Request Audit'}</Button>
+        </motion.div>
       </div>
-      {status && (
-        <p className={`mt-3 text-sm ${status.ok ? 'text-emerald-400' : 'text-red-400'}`}>{status.msg}</p>
-      )}
+      <AnimatePresence>
+        {status && (
+          <motion.p
+            className={`mt-3 text-sm ${status.ok ? 'text-emerald-400' : 'text-red-400'}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+          >
+            {status.msg}
+          </motion.p>
+        )}
+      </AnimatePresence>
     </form>
   );
 }

@@ -2,6 +2,8 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { blogPosts } from '@/content/content';
 import { formatDate } from '@/lib/utils';
+import { ReadingProgress } from '@/components/ReadingProgress';
+import { AISummary } from '@/components/AISummary';
 import type { ReactNode } from 'react';
 
 type Props = { params: { slug: string } };
@@ -62,9 +64,11 @@ export default function BlogDetailPage({ params }: Props) {
   if (!post) return notFound();
   return (
     <section className="container pt-10">
+      <ReadingProgress />
       <article className="max-w-3xl">
         <div className="text-sm text-white/60">{formatDate(post.date)}</div>
         <h1 className="text-3xl font-semibold tracking-tight">{post.title}</h1>
+        <AISummary excerpt={post.excerpt} />
         <div className="mt-6 prose">{renderContent(post.content)}</div>
       </article>
     </section>

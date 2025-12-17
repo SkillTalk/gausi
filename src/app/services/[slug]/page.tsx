@@ -2,6 +2,8 @@ import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { services } from '@/content/content';
 import { Button } from '@/components/Button';
+import { AIFlowDiagram } from '@/components/AIFlowDiagram';
+import { MotionSection } from '@/components/MotionSection';
 
 type Props = { params: { slug: string } };
 
@@ -64,6 +66,13 @@ export default function ServiceDetailPage({ params }: Props) {
           </ul>
         </div>
       </div>
+
+      <MotionSection>
+        <div className="mt-10">
+          <h2 className="font-semibold mb-3">AI Workflow</h2>
+          <AIFlowDiagram />
+        </div>
+      </MotionSection>
 
       {service.faq && service.faq.length > 0 ? (
         <div className="mt-10 card p-6">

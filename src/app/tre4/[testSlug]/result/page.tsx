@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
 import type { ExamResult, Lang } from '@/types/exam';
@@ -9,12 +9,12 @@ import { TopicBreakdown } from '@/components/exam/TopicBreakdown';
 import { WrongAnswerReview } from '@/components/exam/WrongAnswerReview';
 import { LanguageSelector } from '@/components/exam/LanguageSelector';
 
-type PageProps = { params: Promise<{ testSlug: string }> };
+type PageProps = { params: { testSlug: string } };
 
 const RESULT_KEY = 'exam-result-';
 
 export default function ResultPage({ params }: PageProps) {
-  const { testSlug } = use(params);
+  const { testSlug } = params;
   const test = tre4TestsBySlug[testSlug];
   const [result, setResult] = useState<ExamResult | null>(null);
   const [lang, setLang] = useState<Lang>('hi');

@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
 import { createSession, saveSession, markVisited } from '@/lib/exam/session';
@@ -8,10 +8,10 @@ import type { Lang } from '@/types/exam';
 import { LanguageSelector } from '@/components/exam/LanguageSelector';
 import Link from 'next/link';
 
-type PageProps = { params: Promise<{ testSlug: string }> };
+type PageProps = { params: { testSlug: string } };
 
 export default function InstructionsPage({ params }: PageProps) {
-  const { testSlug } = use(params);
+  const { testSlug } = params;
   const router = useRouter();
   const test = tre4TestsBySlug[testSlug];
   const [lang, setLang] = useState<Lang>('hi');

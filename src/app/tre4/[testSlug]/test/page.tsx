@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
 import {
@@ -24,12 +24,12 @@ import { ExamHeader } from '@/components/exam/ExamHeader';
 import { ExamNavBar } from '@/components/exam/ExamNavBar';
 import { SubmitConfirmModal } from '@/components/exam/SubmitConfirmModal';
 
-type PageProps = { params: Promise<{ testSlug: string }> };
+type PageProps = { params: { testSlug: string } };
 
 const RESULT_KEY = 'exam-result-';
 
 export default function TestPage({ params }: PageProps) {
-  const { testSlug } = use(params);
+  const { testSlug } = params;
   const router = useRouter();
   const test = tre4TestsBySlug[testSlug];
 

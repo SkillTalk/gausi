@@ -1,34 +1,43 @@
 import Link from 'next/link';
-import { siteConfig } from '@/content/content';
-import { Button } from './Button';
-import Image from 'next/image';
+import { siteConfig } from '@/content/site';
 
 export function Navbar() {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10 bg-navy-900/70 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur shadow-sm">
       <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-3">
-          <Image src="/logo.svg" alt={siteConfig.name} width={28} height={28} priority />
-          <span className="font-semibold tracking-tight">{siteConfig.name}</span>
+        {/* Logo */}
+        <Link href="/" className="flex flex-col leading-none">
+          <span className="font-extrabold text-brand-700 tracking-tight text-lg">
+            {siteConfig.name}
+          </span>
+          <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">
+            {siteConfig.tagline}
+          </span>
         </Link>
-        <nav className="hidden md:flex items-center gap-6 text-sm">
+
+        {/* Desktop nav */}
+        <nav className="hidden md:flex items-center gap-6 text-sm font-medium" aria-label="Main navigation">
           {siteConfig.nav.map((item) => (
-            <Link key={item.href} href={item.href} className="text-white/80 hover:text-white transition">
+            <Link
+              key={item.href}
+              href={item.href}
+              className="text-slate-600 hover:text-brand-700 transition-colors"
+            >
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="hidden md:flex">
-          <Button href={siteConfig.cta.primary.href}>{siteConfig.cta.primary.label}</Button>
-        </div>
-        <div className="md:hidden">
-          <Button href={siteConfig.cta.primary.href} variant="secondary" className="text-xs py-2 px-3">
-            Free Audit
-          </Button>
+
+        {/* CTA */}
+        <div className="flex items-center gap-2">
+          <Link href={siteConfig.cta.secondary.href} className="hidden md:inline-flex btn-secondary text-sm py-2">
+            {siteConfig.cta.secondary.label}
+          </Link>
+          <Link href={siteConfig.cta.primary.href} className="btn-primary text-sm py-2">
+            {siteConfig.cta.primary.label}
+          </Link>
         </div>
       </div>
     </header>
   );
 }
-
-

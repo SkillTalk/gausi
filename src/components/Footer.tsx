@@ -1,48 +1,52 @@
 import Link from 'next/link';
-import { siteConfig } from '@/content/content';
+import { siteConfig } from '@/content/site';
 
 export function Footer() {
   return (
-    <footer className="mt-24 border-t border-white/10">
-      <div className="container py-10 text-sm text-white/70">
+    <footer className="border-t border-slate-200 bg-white">
+      <div className="container py-10 text-sm text-slate-500">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
-            <div className="font-semibold text-white">{siteConfig.name}</div>
-            <p className="mt-2 max-w-sm">
-              {siteConfig.taglines[1]} {siteConfig.taglines[2]}
+            <div className="font-extrabold text-brand-700 text-base">{siteConfig.name}</div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5 mb-3">
+              {siteConfig.tagline}
+            </p>
+            <p className="max-w-xs leading-relaxed text-slate-500 text-sm">
+              Free daily practice tests for BPSC TRE 4 and Bihar state exams. Available in Hindi & English.
             </p>
             <p className="mt-3">
-              Email: <a href={`mailto:${siteConfig.contact.email}`} className="underline">{siteConfig.contact.email}</a>
+              Email:{' '}
+              <a href={`mailto:${siteConfig.contact.email}`} className="underline hover:text-slate-900">
+                {siteConfig.contact.email}
+              </a>
             </p>
-            <p>Location: {siteConfig.contact.location}</p>
           </div>
+
           <div>
-            <div className="font-semibold text-white">Quick Links</div>
-            <ul className="mt-2 space-y-2">
-              <li><Link href="/services" className="hover:text-white">Services</Link></li>
-              <li><Link href="/case-studies" className="hover:text-white">Case Studies</Link></li>
-              <li><Link href="/blog" className="hover:text-white">Blog</Link></li>
-              <li><Link href="/about" className="hover:text-white">About</Link></li>
+            <div className="font-semibold text-slate-700 mb-3">Exams</div>
+            <ul className="space-y-2">
+              <li><Link href="/tre4" className="hover:text-slate-900 transition-colors">BPSC TRE 4</Link></li>
+              <li><Link href="/tre4/daily" className="hover:text-slate-900 transition-colors">Daily Tests</Link></li>
+              <li><Link href="/tre4/topics" className="hover:text-slate-900 transition-colors">Topic-wise Practice</Link></li>
+              <li><Link href="/tre4/history" className="hover:text-slate-900 transition-colors">My Attempts</Link></li>
+              <li><Link href="/tre4/revision" className="hover:text-slate-900 transition-colors">Revision List</Link></li>
             </ul>
           </div>
+
           <div>
-            <div className="font-semibold text-white">Legal</div>
-            <ul className="mt-2 space-y-2">
-              <li><Link href="/privacy" className="hover:text-white">Privacy Policy</Link></li>
-              <li><Link href="/terms" className="hover:text-white">Terms</Link></li>
+            <div className="font-semibold text-slate-700 mb-3">Legal</div>
+            <ul className="space-y-2">
+              <li><Link href="/privacy" className="hover:text-slate-900 transition-colors">Privacy Policy</Link></li>
+              <li><Link href="/terms" className="hover:text-slate-900 transition-colors">Terms of Use</Link></li>
             </ul>
           </div>
         </div>
-        <div className="mt-8 flex items-center justify-between">
-          <p className="text-white/50">&copy; {new Date().getFullYear()} {siteConfig.name}</p>
-          <div className="flex gap-4">
-            <a href={siteConfig.social.twitter} className="hover:text-white">Twitter</a>
-            <a href={siteConfig.social.linkedin} className="hover:text-white">LinkedIn</a>
-          </div>
+
+        <div className="mt-8 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-400">
+          <p>&copy; {new Date().getFullYear()} {siteConfig.name}. All rights reserved.</p>
+          <p>Practice questions are for educational purposes only.</p>
         </div>
       </div>
     </footer>
   );
 }
-
-

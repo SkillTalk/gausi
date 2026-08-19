@@ -2,9 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Base tokens ──────────────────────────────────────────────────────────── */
 :root {
-  --background: #0B1220;
-  --foreground: #ffffff;
+  --background: #F7F9FC;
+  --foreground: #1E293B;
 }
 
 html, body {
@@ -13,61 +14,144 @@ html, body {
 
 body {
   color: var(--foreground);
-  background:
-    radial-gradient(1200px 600px at 50% -10%, rgba(99,102,241,0.15), transparent 60%),
-    radial-gradient(900px 500px at 90% 10%, rgba(34,211,238,0.18), transparent 60%),
-    #0B1220;
+  background: var(--background);
 }
 
+/* ─── Layout helpers ───────────────────────────────────────────────────────── */
 .container {
   @apply mx-auto max-w-container px-4 sm:px-6 lg:px-8;
 }
 
+/* ─── Card helpers ─────────────────────────────────────────────────────────── */
 .card {
-  @apply bg-navy-800/50 backdrop-blur rounded-xl border border-white/10 shadow-card;
+  @apply bg-white rounded-2xl border border-exam-border shadow-card;
 }
 
+.card-hover {
+  @apply card transition-all duration-200 hover:shadow-card-hover hover:-translate-y-0.5;
+}
+
+/* ─── Buttons ──────────────────────────────────────────────────────────────── */
+.btn {
+  @apply inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2;
+}
+
+.btn-primary {
+  @apply btn bg-brand-600 text-white hover:bg-brand-700 focus-visible:ring-brand-500 shadow-sm;
+}
+
+.btn-secondary {
+  @apply btn bg-white text-brand-700 border border-brand-200 hover:bg-brand-50 focus-visible:ring-brand-400;
+}
+
+.btn-ghost {
+  @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900 focus-visible:ring-slate-400;
+}
+
+.btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500;
+}
+
+/* ─── Typography helpers ───────────────────────────────────────────────────── */
 .heading-gradient {
-  background: linear-gradient(90deg, #60A5FA 0%, #8B5CF6 50%, #22D3EE 100%);
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #2563EB 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-fill-color: transparent;
 }
 
-.btn {
-  @apply inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-medium transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-navy-900;
-}
-.btn-primary {
-  @apply btn bg-electric-600 text-white hover:bg-electric-700 focus-visible:ring-electric-600 border border-white/10 shadow-[0_0_0_0_rgba(34,211,238,0)] hover:shadow-[0_0_24px_0_rgba(34,211,238,0.4)] transition-shadow;
-}
-.btn-secondary {
-  @apply btn bg-white/10 text-white hover:bg-white/20 focus-visible:ring-white/30 border border-white/10;
+/* ─── Exam surface ─────────────────────────────────────────────────────────── */
+.exam-surface {
+  background-color: #F7F9FC;
+  min-height: 100dvh;
 }
 
+.question-card {
+  @apply bg-white rounded-2xl border border-slate-200 shadow-card;
+}
+
+.option-row {
+  @apply flex items-start gap-3 w-full rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left
+    transition-all duration-150 cursor-pointer
+    hover:border-brand-300 hover:bg-brand-50 hover:shadow-sm
+    focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500;
+  /* Large tap target */
+  min-height: 52px;
+}
+
+.option-row.selected {
+  @apply border-brand-500 bg-brand-50 shadow-glow;
+}
+
+.option-row.option-e {
+  @apply border-amber-300 bg-amber-50;
+}
+
+.option-row.option-e.selected {
+  @apply border-amber-500 bg-amber-50;
+}
+
+/* ─── Palette bubble states ─────────────────────────────────────────────────── */
+.palette-bubble {
+  @apply flex h-9 w-9 items-center justify-center rounded-full text-xs font-semibold
+    border-2 transition-all duration-100 cursor-pointer select-none;
+}
+
+.palette-bubble.not-visited {
+  @apply border-slate-300 bg-white text-slate-500;
+}
+
+.palette-bubble.not-answered {
+  @apply border-red-400 bg-red-50 text-red-700;
+}
+
+.palette-bubble.answered {
+  @apply border-green-500 bg-green-500 text-white;
+}
+
+.palette-bubble.marked-for-review {
+  @apply border-purple-500 bg-purple-500 text-white;
+}
+
+.palette-bubble.answered-marked-for-review {
+  @apply border-purple-600 bg-purple-600 text-white;
+}
+
+.palette-bubble.option-e {
+  @apply border-amber-400 bg-amber-100 text-amber-800;
+}
+
+.palette-bubble.current {
+  @apply ring-2 ring-brand-500 ring-offset-1;
+}
+
+/* ─── Homepage decorative ───────────────────────────────────────────────────── */
+.blob {
+  @apply absolute rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob;
+}
+
+/* ─── Prose (for explanations) ──────────────────────────────────────────────── */
 .prose p {
-  @apply mb-4 leading-relaxed text-white/90;
+  @apply mb-4 leading-relaxed text-slate-700;
 }
+
 .prose h2, .prose h3 {
-  @apply mt-8 mb-3 font-semibold text-white;
+  @apply mt-8 mb-3 font-semibold text-slate-900;
 }
+
 .prose ul {
-  @apply list-disc pl-5 space-y-1 mb-4 text-white/90;
+  @apply list-disc pl-5 space-y-1 mb-4 text-slate-700;
 }
 
-/* Glass + glow helpers */
-.glass {
-  @apply bg-white/5 backdrop-blur border border-white/10;
-}
-.glow-border {
-  box-shadow: 0 0 0 1px rgba(99,102,241,0.25), inset 0 0 0 1px rgba(255,255,255,0.06);
-}
-
-/* Animated gradient utility */
-.animated-gradient {
-  background-image: linear-gradient(270deg, rgba(99,102,241,.25), rgba(34,211,238,.3), rgba(139,92,246,.25));
-  background-size: 200% 200%;
-  animation: gradient-x 12s ease infinite;
+/* ─── Reduced motion ────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
-
+/* ─── Mobile safe area ──────────────────────────────────────────────────────── */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}

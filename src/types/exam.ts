@@ -167,3 +167,64 @@ export type RevisionQuestion = {
   selectedOption: OptionKey | null;
   correctOption: CorrectOptionKey;
 };
+
+// ─── User Identity (localStorage — lightweight, no auth token) ─────────────
+export type UserIdentity = {
+  userId: string;
+  email: string;
+};
+
+// ─── Answer Snapshot (stored in DB per attempt) ───────────────────────────────
+export type AnswerSnapshot = {
+  questionId: string;
+  selectedOption: OptionKey | null;
+  correctOption: CorrectOptionKey;
+  status: 'correct' | 'wrong' | 'optionE' | 'unanswered';
+  marksAwarded: number;
+};
+
+// ─── DB Attempt (returned from /api/attempts) ─────────────────────────────────
+export type DbAttempt = {
+  id: string;
+  userId: string;
+  testId: string;
+  testSlug: string;
+  testTitle: string;
+  subject: string | null;
+  topic: string | null;
+  language: string;
+  startedAt: string;       // ISO string
+  submittedAt: string;     // ISO string
+  submissionReason: string;
+  timeUsedSeconds: number;
+  score: number;
+  maxScore: number;
+  correct: number;
+  wrong: number;
+  optionE: number;
+  unanswered: number;
+  attempted: number;
+  accuracy: number;
+  percentage: number;
+  answers: AnswerSnapshot[];
+  topicBreakdown: CategoryResult[] | null;
+  attemptNumber: number;   // computed: 1-based rank per user+test
+  createdAt: string;       // ISO string
+};
+
+// ─── Pending Submission (localStorage retry state) ────────────────────────────
+export type PendingSubmission = {
+  idempotencyKey: string;
+  userId: string;
+  testId: string;
+  testSlug: string;
+  testTitle: string;
+  subject: string | null;
+  topic: string | null;
+  language: string;
+  startedAt: number;       // Unix ms
+  submittedAt: number;     // Unix ms
+  submissionReason: string;
+  timeUsedSeconds: number;
+  answers: Record<string, OptionKey>; // questionId → selected option
+};

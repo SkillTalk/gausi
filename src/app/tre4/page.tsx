@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { tre4Tests } from '@/content/exams/tre4/tests';
 import { tre4TopicGroups } from '@/content/exams/tre4/topics';
+import { RecentAttempts } from '@/components/RecentAttempts';
 
 export const metadata: Metadata = {
   title: 'BPSC TRE 4 Preparation — Daily Tests, Topics & Mock Exams',
@@ -137,6 +138,9 @@ export default function TRE4Page() {
             ))}
           </div>
         </section>
+
+        {/* Recent attempts — client component, only renders if identity exists */}
+        <RecentAttempts />
 
         {/* My Performance CTA */}
         <section>

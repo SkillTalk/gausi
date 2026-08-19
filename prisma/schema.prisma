@@ -1,0 +1,73 @@
+// Prisma schema — gausidigital.com exam portal
+// Connection URL is configured in prisma.config.ts (reads DATABASE_URL from env)
+// At runtime, the PrismaClient uses the pg adapter (see src/lib/db.ts)
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+// Lightweight identity — email only, no password, no OTP.
+// Email is always stored trimmed + lowercased before writes.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attempts TestAttempt[]
+}
+
+// ─── TestAttempt ──────────────────────────────────────────────────────────────
+// Every submission creates a new row. Old rows are never overwritten.
+// The result snapshot (score, answers) is fixed at submission time.
+// If marking config changes later, historical scores are unaffected.
+model TestAttempt {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Test identity
+  testId    String
+  testSlug  String
+  testTitle String
+  subject   String?
+  topic     String?
+
+  // Submission metadata
+  language         String
+  startedAt        DateTime
+  submittedAt      DateTime
+  submissionReason String // "manual" | "timeout"
+  timeUsedSeconds  Int
+
+  // Frozen score snapshot (server-calculated at submission time)
+  score      Float
+  maxScore   Float
+  correct    Int
+  wrong      Int
+  optionE    Int
+  unanswered Int
+  attempted  Int
+  accuracy   Float
+  percentage Float
+
+  // Per-question answer snapshot (JSON array of AnswerSnapshot)
+  answers Json
+
+  // Per-category breakdown (JSON array of CategoryResult)
+  topicBreakdown Json?
+
+  // Idempotency key — client generates once, server enforces uniqueness
+  idempotencyKey String @unique
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, submittedAt(sort: Desc)])
+  @@index([userId, testId])
+}

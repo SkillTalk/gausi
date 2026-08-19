@@ -7,4 +7,10 @@ dist
 *.log
 !.npmrc
 
+# Environment — never commit real credentials
+.env
+.env.local
+.env*.local
 
+# Prisma generated client
+/src/generated/prisma

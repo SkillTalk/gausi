@@ -17,7 +17,13 @@ import {
 import { calculateResult } from '@/lib/exam/scoring';
 import { isExpired } from '@/lib/exam/timer';
 import { addAttempt } from '@/lib/exam/history';
-import type { ExamSession, Lang, OptionKey } from '@/types/exam';
+import {
+  savePendingAttempt,
+  clearPendingAttempt,
+  generateIdempotencyKey,
+} from '@/lib/exam/pending-attempt';
+import { readIdentity } from '@/lib/exam/identity-storage';
+import type { ExamSession, Lang, OptionKey, PendingSubmission } from '@/types/exam';
 import { QuestionCard } from '@/components/exam/QuestionCard';
 import { QuestionPalette } from '@/components/exam/QuestionPalette';
 import { ExamHeader } from '@/components/exam/ExamHeader';
@@ -38,16 +44,13 @@ export default function TestPage({ params }: PageProps) {
   const [showPalette, setShowPalette] = useState(false);
   const autoSubmitFired = useRef(false);
 
-  // Load session from localStorage on mount
   useEffect(() => {
     if (!test) return;
     const existing = loadSession(test.id);
     if (!existing || existing.submitted) {
-      // No valid active session → redirect to instructions
       router.replace(`/tre4/${testSlug}/instructions`);
       return;
     }
-    // If session already expired, auto-submit immediately
     if (isExpired(existing.expiresAt)) {
       handleAutoSubmit(existing);
       return;
@@ -65,18 +68,54 @@ export default function TestPage({ params }: PageProps) {
     });
   }, []);
 
-  const handleAutoSubmit = useCallback((s: ExamSession) => {
-    if (autoSubmitFired.current) return;
-    autoSubmitFired.current = true;
-    const submitted = submitSession(s);
-    saveSession(submitted);
-    if (test) {
-      const result = calculateResult(test, submitted);
-      localStorage.setItem(RESULT_KEY + test.id, JSON.stringify(result));
-      addAttempt(test, result);
-    }
-    router.replace(`/tre4/${testSlug}/result`);
-  }, [test, testSlug, router]);
+  /** Build a PendingSubmission from a submitted session and store it before routing. */
+  const buildAndStorePending = useCallback(
+    (submitted: ExamSession, reason: 'manual' | 'timeout'): void => {
+      if (!test) return;
+      const identity = readIdentity();
+      if (!identity) return; // guest — no server save
+
+      const pending: PendingSubmission = {
+        idempotencyKey: generateIdempotencyKey(),
+        userId: identity.userId,
+        testId: test.id,
+        testSlug: test.slug,
+        testTitle: test.title,
+        subject: test.subject ?? null,
+        topic: test.topicId ?? null,
+        language: submitted.language,
+        startedAt: submitted.startedAt,
+        submittedAt: submitted.submittedAt ?? Date.now(),
+        submissionReason: reason,
+        timeUsedSeconds: Math.round(
+          Math.min(
+            (submitted.submittedAt ?? Date.now()) - submitted.startedAt,
+            test.config.durationMinutes * 60 * 1000
+          ) / 1000
+        ),
+        answers: submitted.answers as Record<string, OptionKey>,
+      };
+      savePendingAttempt(pending);
+    },
+    [test]
+  );
+
+  const handleAutoSubmit = useCallback(
+    (s: ExamSession) => {
+      if (autoSubmitFired.current) return;
+      autoSubmitFired.current = true;
+      const submitted = submitSession(s);
+      saveSession(submitted);
+      if (test) {
+        const result = calculateResult(test, submitted);
+        localStorage.setItem(RESULT_KEY + test.id, JSON.stringify(result));
+        addAttempt(test, result);
+        buildAndStorePending(submitted, 'timeout');
+      }
+      router.replace(`/tre4/${testSlug}/result`);
+    },
+    [test, testSlug, router, buildAndStorePending]
+  );
 
   const handleTimerExpire = useCallback(() => {
     setSession((prev) => {
@@ -142,6 +181,11 @@ export default function TestPage({ params }: PageProps) {
     const result = calculateResult(test, submitted);
     localStorage.setItem(RESULT_KEY + test.id, JSON.stringify(result));
     addAttempt(test, result);
+
+    // Clear any old pending attempt before storing the new one
+    clearPendingAttempt();
+    buildAndStorePending(submitted, 'manual');
+
     router.push(`/tre4/${testSlug}/result`);
   };
 
@@ -182,7 +226,6 @@ export default function TestPage({ params }: PageProps) {
 
       <div className="container py-4 md:py-6">
         <div className="flex gap-6 items-start">
-          {/* Main question area */}
           <div className="flex-1 min-w-0">
             {currentQ && (
               <>
@@ -211,7 +254,6 @@ export default function TestPage({ params }: PageProps) {
             )}
           </div>
 
-          {/* Desktop palette */}
           <aside className="hidden lg:block w-64 shrink-0 sticky top-20">
             <div className="card p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">
@@ -227,7 +269,6 @@ export default function TestPage({ params }: PageProps) {
           </aside>
         </div>
 
-        {/* Mobile palette toggle */}
         <div className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 pb-safe">
           <div className="container py-2 flex items-center justify-between gap-2">
             <button
@@ -253,11 +294,9 @@ export default function TestPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Bottom spacer for mobile */}
         <div className="h-24 lg:h-0" />
       </div>
 
-      {/* Submit modal */}
       {showSubmit && (
         <SubmitConfirmModal
           session={session}

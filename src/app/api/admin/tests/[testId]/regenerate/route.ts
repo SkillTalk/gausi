@@ -47,18 +47,19 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: 'Test not found.' }, { status: 404 });
   }
 
-  if (!['DRAFT', 'GENERATED', 'VALIDATION_FAILED'].includes(test.status)) {
+  const REGENERATABLE = ['DRAFT', 'GENERATED', 'VALIDATION_FAILED', 'READY'];
+  if (!REGENERATABLE.includes(test.status)) {
     return NextResponse.json(
-      { error: `Cannot regenerate a test with status ${test.status}.` },
+      { error: `Cannot regenerate a test with status "${test.status}". Published and Archived tests are immutable.` },
       { status: 409 }
     );
   }
 
-  // Mark as GENERATING and wipe old questions
+  // Mark as GENERATING, wipe old questions, increment contentVersion
   await db.$transaction([
     db.generatedTest.update({
       where: { id: testId },
-      data: { status: 'GENERATING', errorMessage: null },
+      data: { status: 'GENERATING', errorMessage: null, contentVersion: { increment: 1 } },
     }),
     db.generatedQuestion.deleteMany({ where: { testId } }),
   ]);

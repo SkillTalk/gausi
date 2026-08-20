@@ -35,7 +35,20 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { testId } = await params;
 
   try {
-    // Questions are CASCADE-deleted automatically via FK
+    const test = await db.generatedTest.findUnique({ where: { id: testId }, select: { status: true } });
+    if (!test) {
+      return NextResponse.json({ error: 'Test not found.' }, { status: 404 });
+    }
+
+    // Immutability: published tests cannot be deleted; archive them instead.
+    if (test.status === 'PUBLISHED') {
+      return NextResponse.json(
+        { error: 'PUBLISHED tests cannot be deleted. Archive the test instead to hide it from public listings.' },
+        { status: 409 }
+      );
+    }
+
+    // Questions and validation results are CASCADE-deleted via FK
     await db.generatedTest.delete({ where: { id: testId } });
     return NextResponse.json({ deleted: true });
   } catch (err) {

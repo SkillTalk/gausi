@@ -47,11 +47,16 @@ model GeneratedTest {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
+  publishAt      DateTime?
+  publishedAt    DateTime?
+  contentVersion Int       @default(1)
+
   questions  GeneratedQuestion[]
   validation TestValidation?
 
   @@index([status, createdAt(sort: Desc)])
   @@index([exam, category, status])
+  @@index([status, publishAt])
 }
 
 // ─── TestValidation ───────────────────────────────────────────────────────────
@@ -71,6 +76,7 @@ model TestValidation {
   validatorModel   String?  // e.g. "gpt-4o"
   validationMs     Int?
   validatedAt      DateTime @default(now())
+  contentVersion   Int      @default(1)  // snapshot of GeneratedTest.contentVersion at validation time
 
   questionResults  QuestionValidationResult[]
 

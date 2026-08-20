@@ -6,6 +6,7 @@ export type GeneratedTestStatus =
   | 'VALIDATING'
   | 'VALIDATION_FAILED'
   | 'READY'
+  | 'SCHEDULED'
   | 'PUBLISHED'
   | 'ARCHIVED';
 
@@ -47,6 +48,9 @@ export type GeneratedTest = {
   durationMinutes: number;
   status: GeneratedTestStatus;
   plannedPublishAt: string | null;
+  publishAt: string | null;
+  publishedAt: string | null;
+  contentVersion: number;
   generationSource: string;
   generationModel: string | null;
   generationMs: number | null;

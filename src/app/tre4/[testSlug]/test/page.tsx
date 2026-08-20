@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
+import { useTest } from '@/hooks/useTest';
 import {
   loadSession,
   saveSession,
@@ -37,7 +37,7 @@ const RESULT_KEY = 'exam-result-';
 export default function TestPage({ params }: PageProps) {
   const { testSlug } = params;
   const router = useRouter();
-  const test = tre4TestsBySlug[testSlug];
+  const { test, loading: testLoading } = useTest(testSlug);
 
   const [session, setSession] = useState<ExamSession | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
@@ -45,7 +45,7 @@ export default function TestPage({ params }: PageProps) {
   const autoSubmitFired = useRef(false);
 
   useEffect(() => {
-    if (!test) return;
+    if (testLoading || !test) return;
     const existing = loadSession(test.id);
     if (!existing || existing.submitted) {
       router.replace(`/tre4/${testSlug}/instructions`);
@@ -126,6 +126,7 @@ export default function TestPage({ params }: PageProps) {
   }, [handleAutoSubmit]);
 
   const handleSelectOption = (option: OptionKey) => {
+    if (!test) return;
     updateSession((s) => {
       const q = test.questions[s.currentQuestion];
       if (!q) return s;
@@ -134,6 +135,7 @@ export default function TestPage({ params }: PageProps) {
   };
 
   const handleClearResponse = () => {
+    if (!test) return;
     updateSession((s) => {
       const q = test.questions[s.currentQuestion];
       if (!q) return s;
@@ -142,6 +144,7 @@ export default function TestPage({ params }: PageProps) {
   };
 
   const handleMarkReview = () => {
+    if (!test) return;
     updateSession((s) => {
       const q = test.questions[s.currentQuestion];
       if (!q) return s;
@@ -150,6 +153,7 @@ export default function TestPage({ params }: PageProps) {
   };
 
   const navigateTo = (index: number) => {
+    if (!test) return;
     updateSession((s) => {
       const q = test.questions[index];
       if (!q) return s;
@@ -159,7 +163,7 @@ export default function TestPage({ params }: PageProps) {
   };
 
   const handleNext = () => {
-    if (!session) return;
+    if (!session || !test) return;
     const next = session.currentQuestion + 1;
     if (next < test.questions.length) navigateTo(next);
   };
@@ -188,6 +192,14 @@ export default function TestPage({ params }: PageProps) {
 
     router.push(`/tre4/${testSlug}/result`);
   };
+
+  if (testLoading) {
+    return (
+      <div className="exam-surface flex items-center justify-center min-h-screen">
+        <div className="text-slate-400 text-sm">Loading test…</div>
+      </div>
+    );
+  }
 
   if (!test) {
     return (

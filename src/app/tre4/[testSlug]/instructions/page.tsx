@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
 import { createSession, saveSession, markVisited } from '@/lib/exam/session';
 import type { Lang, UserIdentity } from '@/types/exam';
 import { LanguageSelector } from '@/components/exam/LanguageSelector';
 import { EmailEntry } from '@/components/EmailEntry';
 import { useUser } from '@/hooks/useUser';
+import { useTest } from '@/hooks/useTest';
 import Link from 'next/link';
 
 type PageProps = { params: { testSlug: string } };
@@ -17,16 +17,25 @@ type Step = 'loading' | 'email' | 'instructions';
 export default function InstructionsPage({ params }: PageProps) {
   const { testSlug } = params;
   const router = useRouter();
-  const test = tre4TestsBySlug[testSlug];
+  const { test, loading: testLoading } = useTest(testSlug);
   const [lang, setLang] = useState<Lang>('hi');
   const [step, setStep] = useState<Step>('loading');
   const { identity, loaded, setIdentity } = useUser();
 
-  // After localStorage loads, decide which step to show
+  // After both test and localStorage are ready, decide which step to show
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || testLoading) return;
+    if (!test) return; // will render "not found" below
     setStep(identity ? 'instructions' : 'email');
-  }, [loaded, identity]);
+  }, [loaded, testLoading, identity, test]);
+
+  if (testLoading) {
+    return (
+      <div className="exam-surface flex items-center justify-center min-h-screen">
+        <div className="text-slate-400 text-sm">Loading test…</div>
+      </div>
+    );
+  }
 
   if (!test) {
     return (

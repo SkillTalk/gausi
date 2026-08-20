@@ -46,6 +46,7 @@ export async function POST(_req: Request, { params }: Params) {
     difficulty: string;
     status: string;
     totalQuestions: number;
+    contentVersion: number;
     questions: GeneratedQuestion[];
   } | null;
 
@@ -165,6 +166,7 @@ export async function POST(_req: Request, { params }: Params) {
           validatorModel: aiModel,
           validationMs,
           validatedAt: new Date(),
+          contentVersion: test!.contentVersion,
         },
       });
 

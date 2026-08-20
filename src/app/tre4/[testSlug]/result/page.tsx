@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
+import { useTest } from '@/hooks/useTest';
 import type { ExamResult, Lang, PendingSubmission } from '@/types/exam';
 import { ResultSummary } from '@/components/exam/ResultSummary';
 import { TopicBreakdown } from '@/components/exam/TopicBreakdown';
@@ -43,7 +43,7 @@ async function postAttempt(pending: PendingSubmission): Promise<string | null> {
 
 export default function ResultPage({ params }: PageProps) {
   const { testSlug } = params;
-  const test = tre4TestsBySlug[testSlug];
+  const { test, loading: testLoading } = useTest(testSlug);
   const [result, setResult] = useState<ExamResult | null>(null);
   const [lang, setLang] = useState<Lang>('hi');
   const [showReview, setShowReview] = useState(false);
@@ -93,6 +93,14 @@ export default function ResultPage({ params }: PageProps) {
       setSaveStatus('failed');
     }
   }, [pendingAttempt]);
+
+  if (testLoading) {
+    return (
+      <div className="exam-surface flex items-center justify-center min-h-screen">
+        <div className="text-slate-400 text-sm">Loading…</div>
+      </div>
+    );
+  }
 
   if (!test) {
     return (

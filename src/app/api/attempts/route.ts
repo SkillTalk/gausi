@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
-import type { OptionKey, AnswerSnapshot, CategoryResult } from '@/types/exam';
+import { getTestById } from '@/lib/test-provider';
+import type { OptionKey, AnswerSnapshot, CategoryResult, ExamTest } from '@/types/exam';
 
 export const runtime = 'nodejs';
 
@@ -37,14 +37,11 @@ type ServerResult = {
 };
 
 function recalculate(
-  testId: string,
+  test: ExamTest,
   rawAnswers: Record<string, OptionKey | null>,
   startedAt: Date,
   submittedAt: Date
 ): ServerResult | { error: string } {
-  // Find test by ID across all registered tests
-  const test = Object.values(tre4TestsBySlug).find((t) => t.id === testId);
-  if (!test) return { error: `Test not found: ${testId}` };
 
   const { config, questions } = test;
   const { marks } = config;
@@ -207,14 +204,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
-  // Find test metadata
-  const test = Object.values(tre4TestsBySlug).find((t) => t.id === b.testId);
+  // Look up test (static first, then PUBLISHED DB tests)
+  const test = await getTestById(b.testId);
   if (!test) {
     return NextResponse.json({ error: 'Test not found' }, { status: 404 });
   }
 
   // Server-side score recalculation
-  const result = recalculate(b.testId, cleanAnswers, startedAt, submittedAt);
+  const result = recalculate(test, cleanAnswers, startedAt, submittedAt);
   if ('error' in result) {
     return NextResponse.json({ error: result.error }, { status: 422 });
   }

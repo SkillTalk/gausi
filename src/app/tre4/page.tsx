@@ -2,7 +2,10 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { tre4Tests } from '@/content/exams/tre4/tests';
 import { tre4TopicGroups } from '@/content/exams/tre4/topics';
+import { getPublishedDbTests } from '@/lib/test-provider';
 import { RecentAttempts } from '@/components/RecentAttempts';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'BPSC TRE 4 Preparation — Daily Tests, Topics & Mock Exams',
@@ -11,10 +14,30 @@ export const metadata: Metadata = {
   alternates: { canonical: '/tre4' },
 };
 
-export default function TRE4Page() {
-  const latestTest = [...tre4Tests].sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  )[0];
+export default async function TRE4Page() {
+  // Gather all published tests (static + DB), newest first
+  type TestCard = {
+    id: string; slug: string; date: string; title: string; titleHi: string;
+    subject: string; totalQuestions: number; durationMinutes: number; difficulty: string;
+  };
+
+  let dbTests: TestCard[] = [];
+  try {
+    dbTests = await getPublishedDbTests({ exam: 'BPSC TRE 4' });
+  } catch { /* DB unavailable — graceful degradation */ }
+
+  const staticCards: TestCard[] = tre4Tests.map((t) => ({
+    id: t.id, slug: t.slug, date: t.date, title: t.title, titleHi: t.titleHi,
+    subject: t.subject, totalQuestions: t.config.totalQuestions, durationMinutes: t.config.durationMinutes, difficulty: t.difficulty,
+  }));
+
+  const allBySlug = new Map<string, TestCard>();
+  for (const t of staticCards) allBySlug.set(t.slug, t);
+  for (const t of dbTests) allBySlug.set(t.slug, t);
+  const allSorted = [...allBySlug.values()].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const latestTest = allSorted[0] ?? null;
+  const recentTests = allSorted.slice(0, 5);
 
   return (
     <div className="min-h-screen bg-exam-bg">
@@ -50,7 +73,7 @@ export default function TRE4Page() {
           <section>
             <h2 className="text-xl font-bold text-slate-900 mb-4">Today&apos;s Test</h2>
             <div className="card p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className={`h-16 w-16 shrink-0 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-2xl`}>
+              <div className="h-16 w-16 shrink-0 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-2xl">
                 📜
               </div>
               <div className="flex-1">
@@ -59,7 +82,7 @@ export default function TRE4Page() {
                   <span className="text-xs font-bold text-green-700 bg-green-50 px-2 py-0.5 rounded-full">{latestTest.difficulty}</span>
                 </div>
                 <h3 className="text-lg font-bold text-slate-900">{latestTest.title}</h3>
-                <p className="text-sm text-slate-500 mt-0.5">{latestTest.titleHi} • {latestTest.config.totalQuestions} Questions • {latestTest.config.durationMinutes} min</p>
+                <p className="text-sm text-slate-500 mt-0.5">{latestTest.titleHi} • {latestTest.totalQuestions} Questions • {latestTest.durationMinutes} min</p>
               </div>
               <Link href={`/tre4/${latestTest.slug}/instructions`} className="btn-primary whitespace-nowrap">
                 Start Test →
@@ -98,23 +121,20 @@ export default function TRE4Page() {
             <Link href="/tre4/daily" className="text-sm text-brand-600 hover:text-brand-800 font-semibold">All Tests →</Link>
           </div>
           <div className="flex flex-col gap-3">
-            {[...tre4Tests]
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .slice(0, 5)
-              .map((test) => (
-                <div key={test.id} className="card-hover p-4 flex items-center gap-4">
-                  <div className="text-xs text-slate-400 shrink-0 w-20">
-                    {new Date(test.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-slate-800 truncate">{test.title}</div>
-                    <div className="text-xs text-slate-500">{test.config.totalQuestions}Q • {test.config.durationMinutes}min</div>
-                  </div>
-                  <Link href={`/tre4/${test.slug}/instructions`} className="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">
-                    Start
-                  </Link>
+            {recentTests.map((test) => (
+              <div key={test.id} className="card-hover p-4 flex items-center gap-4">
+                <div className="text-xs text-slate-400 shrink-0 w-20">
+                  {new Date(test.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                 </div>
-              ))}
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-slate-800 truncate">{test.title}</div>
+                  <div className="text-xs text-slate-500">{test.totalQuestions}Q • {test.durationMinutes}min</div>
+                </div>
+                <Link href={`/tre4/${test.slug}/instructions`} className="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap">
+                  Start
+                </Link>
+              </div>
+            ))}
           </div>
         </section>
 

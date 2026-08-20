@@ -232,6 +232,14 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   const [regenerating, setRegenerating] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [cancellingSchedule, setCancellingSchedule] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('05:00');
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [publishMsg, setPublishMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // Build a lookup map: questionId → validation result
   const valByQuestionId = new Map<string, StoredQuestionValidation>();
@@ -316,6 +324,105 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     setRegenerating(false);
   }
 
+  async function handlePublishNow() {
+    if (!window.confirm('Publish this test now? It will immediately appear on public pages.')) return;
+    setPublishing(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/publish`, { method: 'POST' });
+      const data = await res.json() as { error?: string; publishedAt?: string };
+      if (res.ok) {
+        setPublishMsg({ ok: true, text: `Published at ${data.publishedAt ? new Date(data.publishedAt).toLocaleString('en-IN') : 'now'}.` });
+        await reloadTest();
+      } else {
+        setPublishMsg({ ok: false, text: data.error ?? 'Publish failed.' });
+      }
+    } catch {
+      setPublishMsg({ ok: false, text: 'Network error.' });
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  async function handleSchedule() {
+    if (!scheduleDate || !scheduleTime) {
+      alert('Please enter a date and time.');
+      return;
+    }
+    // Convert IST to UTC (IST = UTC+5:30)
+    const istDateStr = `${scheduleDate}T${scheduleTime}:00+05:30`;
+    const publishAt = new Date(istDateStr);
+    if (isNaN(publishAt.getTime())) {
+      alert('Invalid date or time.');
+      return;
+    }
+    if (publishAt <= new Date()) {
+      alert('Scheduled time must be in the future.');
+      return;
+    }
+    setScheduling(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/schedule`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publishAt: publishAt.toISOString() }),
+      });
+      const data = await res.json() as { error?: string; publishAt?: string };
+      if (res.ok) {
+        setPublishMsg({ ok: true, text: `Scheduled for ${publishAt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })} IST.` });
+        setShowScheduleForm(false);
+        await reloadTest();
+      } else {
+        setPublishMsg({ ok: false, text: data.error ?? 'Schedule failed.' });
+      }
+    } catch {
+      setPublishMsg({ ok: false, text: 'Network error.' });
+    } finally {
+      setScheduling(false);
+    }
+  }
+
+  async function handleCancelSchedule() {
+    if (!window.confirm('Cancel the scheduled publication? The test will revert to READY.')) return;
+    setCancellingSchedule(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/cancel-schedule`, { method: 'POST' });
+      const data = await res.json() as { error?: string };
+      if (res.ok) {
+        setPublishMsg({ ok: true, text: 'Schedule cancelled. Test is now READY.' });
+        await reloadTest();
+      } else {
+        setPublishMsg({ ok: false, text: data.error ?? 'Cancel failed.' });
+      }
+    } catch {
+      setPublishMsg({ ok: false, text: 'Network error.' });
+    } finally {
+      setCancellingSchedule(false);
+    }
+  }
+
+  async function handleArchive() {
+    if (!window.confirm('Archive this test? It will be hidden from public listings but all student attempt history remains intact.')) return;
+    setArchiving(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/archive`, { method: 'POST' });
+      const data = await res.json() as { error?: string };
+      if (res.ok) {
+        setPublishMsg({ ok: true, text: 'Test archived.' });
+        await reloadTest();
+      } else {
+        setPublishMsg({ ok: false, text: data.error ?? 'Archive failed.' });
+      }
+    } catch {
+      setPublishMsg({ ok: false, text: 'Network error.' });
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   if (loading) {
     return <div className="text-center py-20 text-slate-400">Loading test preview...</div>;
   }
@@ -333,7 +440,20 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     : 'Not set';
 
   const canValidate = ['GENERATED', 'VALIDATION_FAILED', 'READY'].includes(test.status);
-  const isOperationInProgress = validating || regenerating || deleting || test.status === 'GENERATING' || test.status === 'VALIDATING';
+  const canPublishNow = ['READY', 'SCHEDULED'].includes(test.status);
+  const canSchedule = test.status === 'READY';
+  const canCancelSchedule = test.status === 'SCHEDULED';
+  const canArchive = test.status === 'PUBLISHED';
+  const isPublished = test.status === 'PUBLISHED';
+  const isOperationInProgress = validating || regenerating || deleting || publishing || scheduling || cancellingSchedule || archiving || test.status === 'GENERATING' || test.status === 'VALIDATING';
+
+  // Display schedule time in IST
+  const scheduledAtIST = (test as GeneratedTestWithQuestions & { publishAt?: string | null }).publishAt
+    ? new Date((test as GeneratedTestWithQuestions & { publishAt?: string | null }).publishAt!).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+    : null;
+  const publishedAtIST = (test as GeneratedTestWithQuestions & { publishedAt?: string | null }).publishedAt
+    ? new Date((test as GeneratedTestWithQuestions & { publishedAt?: string | null }).publishedAt!).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+    : null;
 
   return (
     <div className="space-y-8">
@@ -379,23 +499,27 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               </button>
             )}
 
-            {/* Regenerate */}
-            <button
-              onClick={() => { void handleRegenerate(); }}
-              disabled={isOperationInProgress}
-              className="btn-secondary text-sm px-4 py-2 disabled:opacity-50"
-            >
-              {regenerating ? 'Regenerating...' : '↺ Regenerate Full Test'}
-            </button>
+            {/* Regenerate — disabled for immutable states */}
+            {!isPublished && test.status !== 'ARCHIVED' && (
+              <button
+                onClick={() => { void handleRegenerate(); }}
+                disabled={isOperationInProgress}
+                className="btn-secondary text-sm px-4 py-2 disabled:opacity-50"
+              >
+                {regenerating ? 'Regenerating...' : '↺ Regenerate Full Test'}
+              </button>
+            )}
 
-            {/* Delete */}
-            <button
-              onClick={() => { void handleDelete(); }}
-              disabled={deleting}
-              className="text-sm font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {deleting ? 'Deleting...' : 'Delete'}
-            </button>
+            {/* Delete — disabled for PUBLISHED tests */}
+            {!isPublished && (
+              <button
+                onClick={() => { void handleDelete(); }}
+                disabled={deleting}
+                className="text-sm font-semibold text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -438,6 +562,118 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
       {/* Validation results summary */}
       {validation && !validating && test.status !== 'VALIDATING' && (
         <ValidationSummaryPanel validation={validation} />
+      )}
+
+      {/* ── Publish / Schedule Panel ─────────────────────────────────────── */}
+      {(canPublishNow || canSchedule || canCancelSchedule || canArchive || isPublished) && (
+        <div className={`rounded-xl border p-5 space-y-4 ${
+          isPublished ? 'bg-brand-50 border-brand-200' :
+          canCancelSchedule ? 'bg-indigo-50 border-indigo-200' :
+          'bg-slate-50 border-slate-200'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Publication</h3>
+              {isPublished && publishedAtIST && (
+                <p className="text-sm text-brand-700 mt-0.5">Published on {publishedAtIST} IST</p>
+              )}
+              {canCancelSchedule && scheduledAtIST && (
+                <p className="text-sm text-indigo-700 mt-0.5">Scheduled for {scheduledAtIST} IST</p>
+              )}
+              {canPublishNow && !isPublished && (
+                <p className="text-xs text-slate-500 mt-0.5">This test has passed validation and is ready to publish.</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {canPublishNow && (
+                <button
+                  onClick={() => { void handlePublishNow(); }}
+                  disabled={isOperationInProgress}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors disabled:opacity-50"
+                >
+                  {publishing ? 'Publishing…' : '🚀 Publish Now'}
+                </button>
+              )}
+              {canSchedule && (
+                <button
+                  onClick={() => setShowScheduleForm((p) => !p)}
+                  disabled={isOperationInProgress}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50"
+                >
+                  🗓 Schedule Publication
+                </button>
+              )}
+              {canCancelSchedule && (
+                <button
+                  onClick={() => { void handleCancelSchedule(); }}
+                  disabled={isOperationInProgress}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-700 transition-colors disabled:opacity-50"
+                >
+                  {cancellingSchedule ? 'Cancelling…' : '✕ Cancel Schedule'}
+                </button>
+              )}
+              {canArchive && (
+                <button
+                  onClick={() => { void handleArchive(); }}
+                  disabled={isOperationInProgress}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-100 text-slate-600 transition-colors disabled:opacity-50"
+                >
+                  {archiving ? 'Archiving…' : 'Archive'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Schedule form */}
+          {showScheduleForm && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-700">Schedule Publication (IST)</p>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-500">Date</label>
+                  <input
+                    type="date"
+                    value={scheduleDate}
+                    onChange={(e) => setScheduleDate(e.target.value)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs text-slate-500">Time (IST)</label>
+                  <input
+                    type="time"
+                    value={scheduleTime}
+                    onChange={(e) => setScheduleTime(e.target.value)}
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { void handleSchedule(); }}
+                  disabled={scheduling || !scheduleDate}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition-colors disabled:opacity-50"
+                >
+                  {scheduling ? 'Scheduling…' : 'Confirm Schedule'}
+                </button>
+                <button
+                  onClick={() => setShowScheduleForm(false)}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback message */}
+          {publishMsg && (
+            <div className={`text-sm font-medium px-3 py-2 rounded-lg ${publishMsg.ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {publishMsg.ok ? '✅ ' : '❌ '}{publishMsg.text}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Questions */}

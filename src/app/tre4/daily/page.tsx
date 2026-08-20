@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { tre4Tests } from '@/content/exams/tre4/tests';
+import { getPublishedDbTests } from '@/lib/test-provider';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Daily Practice Tests — BPSC TRE 4',
@@ -13,8 +16,56 @@ const DIFFICULTY_COLOUR: Record<string, string> = {
   Advanced: 'bg-red-100 text-red-700',
 };
 
-export default function DailyTestsPage() {
-  const sorted = [...tre4Tests].sort(
+type TestCard = {
+  id: string;
+  slug: string;
+  date: string;
+  title: string;
+  titleHi: string;
+  subject: string;
+  difficulty: string;
+  totalQuestions: number;
+  durationMinutes: number;
+};
+
+export default async function DailyTestsPage() {
+  // Merge static tests with PUBLISHED DB tests
+  const staticCards: TestCard[] = tre4Tests.map((t) => ({
+    id: t.id,
+    slug: t.slug,
+    date: t.date,
+    title: t.title,
+    titleHi: t.titleHi,
+    subject: t.subject,
+    difficulty: t.difficulty,
+    totalQuestions: t.config.totalQuestions,
+    durationMinutes: t.config.durationMinutes,
+  }));
+
+  let dbCards: TestCard[] = [];
+  try {
+    const dbTests = await getPublishedDbTests({ exam: 'BPSC TRE 4' });
+    dbCards = dbTests.map((t) => ({
+      id: t.id,
+      slug: t.slug,
+      date: t.date,
+      title: t.title,
+      titleHi: t.titleHi,
+      subject: t.subject,
+      difficulty: t.difficulty,
+      totalQuestions: t.totalQuestions,
+      durationMinutes: t.durationMinutes,
+    }));
+  } catch {
+    // DB unavailable — graceful degradation to static only
+  }
+
+  // Merge and deduplicate by slug, DB tests take precedence
+  const allBySlug = new Map<string, TestCard>();
+  for (const t of staticCards) allBySlug.set(t.slug, t);
+  for (const t of dbCards) allBySlug.set(t.slug, t);
+
+  const sorted = [...allBySlug.values()].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
 
@@ -45,7 +96,7 @@ export default function DailyTestsPage() {
                 <div className="flex flex-col items-start sm:items-center sm:w-24 shrink-0">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">{dateDisplay}</span>
                   <span className="text-xs font-semibold text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full mt-1">
-                    {test.subjectHi} / {test.subject}
+                    {test.subject}
                   </span>
                 </div>
 
@@ -54,11 +105,9 @@ export default function DailyTestsPage() {
                   <h2 className="font-bold text-slate-900 text-lg">{test.title}</h2>
                   <p className="text-sm text-slate-500">{test.titleHi}</p>
                   <div className="flex flex-wrap gap-2 mt-2">
-                    <Badge>{test.config.totalQuestions} Questions</Badge>
-                    <Badge>{test.config.durationMinutes} Minutes</Badge>
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_COLOUR[test.difficulty] ?? ''}`}
-                    >
+                    <Badge>{test.totalQuestions} Questions</Badge>
+                    <Badge>{test.durationMinutes} Minutes</Badge>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${DIFFICULTY_COLOUR[test.difficulty] ?? 'bg-slate-100 text-slate-600'}`}>
                       {test.difficulty}
                     </span>
                   </div>

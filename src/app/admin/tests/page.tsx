@@ -25,9 +25,11 @@ function StatusBadge({ status }: { status: string }) {
     DRAFT: 'bg-slate-100 text-slate-600',
     GENERATING: 'bg-amber-100 text-amber-700 animate-pulse',
     GENERATED: 'bg-green-100 text-green-700',
+    VALIDATING: 'bg-purple-100 text-purple-700 animate-pulse',
     VALIDATION_FAILED: 'bg-red-100 text-red-700',
     READY: 'bg-blue-100 text-blue-700',
-    PUBLISHED: 'bg-indigo-100 text-indigo-700',
+    SCHEDULED: 'bg-indigo-100 text-indigo-700',
+    PUBLISHED: 'bg-brand-100 text-brand-700',
     ARCHIVED: 'bg-slate-100 text-slate-400',
   };
   return (
@@ -273,13 +275,13 @@ export default function AdminTestsPage() {
         </form>
       </section>
 
-      {/* ─── Future Automation Panel (placeholder) ───────────────────────── */}
-      <section className="bg-white rounded-2xl border border-slate-200 border-dashed p-6">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Coming in Agent 2+</p>
-        <div className="flex flex-wrap gap-6 text-sm text-slate-400">
-          <span>Auto Generation: <strong className="text-slate-500">—</strong></span>
-          <span>Validator: <strong className="text-slate-500">—</strong></span>
-          <span>Auto-Publish: <strong className="text-slate-500">—</strong></span>
+      {/* ─── Agent Status Panel ───────────────────────────────────────────── */}
+      <section className="bg-white rounded-2xl border border-slate-200 p-6">
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Agent Pipeline Status</p>
+        <div className="flex flex-wrap gap-6 text-sm">
+          <span className="text-green-700">✅ Agent 1: Question Generator</span>
+          <span className="text-green-700">✅ Agent 2: Validator / Reviewer</span>
+          <span className="text-green-700">✅ Agent 3: Publish &amp; Scheduling</span>
         </div>
       </section>
 
@@ -301,14 +303,21 @@ export default function AdminTestsPage() {
                   <th className="px-4 py-3">Topic / Category</th>
                   <th className="px-4 py-3 hidden sm:table-cell">Difficulty</th>
                   <th className="px-4 py-3 hidden md:table-cell">Questions</th>
-                  <th className="px-4 py-3 hidden md:table-cell">Planned Publish</th>
+                  <th className="px-4 py-3 hidden lg:table-cell">Published / Scheduled</th>
                   <th className="px-4 py-3 hidden lg:table-cell">Created</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {tests.map(test => (
+                {tests.map(test => {
+                  const t = test as GeneratedTest & { publishAt?: string | null; publishedAt?: string | null };
+                  const pubDisplay = t.publishedAt
+                    ? formatDate(t.publishedAt)
+                    : t.publishAt
+                    ? `Sched: ${formatDate(t.publishAt)}`
+                    : '—';
+                  return (
                   <tr key={test.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-semibold text-slate-800 truncate max-w-[200px]">{test.topic}</div>
@@ -316,33 +325,34 @@ export default function AdminTestsPage() {
                     </td>
                     <td className="px-4 py-3 hidden sm:table-cell text-slate-600">{test.difficulty}</td>
                     <td className="px-4 py-3 hidden md:table-cell text-slate-600">{test.totalQuestions}Q · {test.durationMinutes}min</td>
-                    <td className="px-4 py-3 hidden md:table-cell text-slate-500 text-xs">{formatDate(test.plannedPublishAt)}</td>
+                    <td className="px-4 py-3 hidden lg:table-cell text-slate-500 text-xs">{pubDisplay}</td>
                     <td className="px-4 py-3 hidden lg:table-cell text-slate-400 text-xs">{formatDate(test.createdAt)}</td>
                     <td className="px-4 py-3"><StatusBadge status={test.status} /></td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {test.status === 'GENERATED' && (
-                          <Link
-                            href={`/admin/tests/${test.id}`}
-                            className="text-xs font-semibold text-brand-600 hover:text-brand-800"
-                          >
-                            Preview
-                          </Link>
-                        )}
-                        <button
-                          onClick={() => { void handleDelete(test.id); }}
-                          className={`text-xs font-semibold transition-colors ${
-                            deleteId === test.id
-                              ? 'text-white bg-red-600 px-2 py-0.5 rounded'
-                              : 'text-red-500 hover:text-red-700'
-                          }`}
+                        <Link
+                          href={`/admin/tests/${test.id}`}
+                          className="text-xs font-semibold text-brand-600 hover:text-brand-800"
                         >
-                          {deleteId === test.id ? 'Confirm Delete' : 'Delete'}
-                        </button>
+                          View
+                        </Link>
+                        {test.status !== 'PUBLISHED' && (
+                          <button
+                            onClick={() => { void handleDelete(test.id); }}
+                            className={`text-xs font-semibold transition-colors ${
+                              deleteId === test.id
+                                ? 'text-white bg-red-600 px-2 py-0.5 rounded'
+                                : 'text-red-500 hover:text-red-700'
+                            }`}
+                          >
+                            {deleteId === test.id ? 'Confirm' : 'Delete'}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

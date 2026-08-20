@@ -23,6 +23,73 @@ model User {
   attempts TestAttempt[]
 }
 
+// ─── GeneratedTest ────────────────────────────────────────────────────────────
+// AI-generated test papers. Status-driven workflow.
+// Agent 1 uses: DRAFT → GENERATING → GENERATED
+// Future agents: VALIDATION_FAILED | READY | PUBLISHED | ARCHIVED
+model GeneratedTest {
+  id               String    @id @default(cuid())
+  exam             String    // e.g. "BPSC TRE 4"
+  category         String    // e.g. "History"
+  topic            String    // e.g. "Revolt of 1857"
+  slug             String    @unique
+  titleHi          String
+  titleEn          String
+  difficulty       String    // "Beginner" | "Easy" | "Moderate" | "Hard" | "Mixed"
+  totalQuestions   Int
+  durationMinutes  Int
+  status           String    @default("DRAFT")
+  plannedPublishAt DateTime?
+  generationSource String    @default("openai")
+  generationModel  String?
+  generationMs     Int?
+  errorMessage     String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  questions GeneratedQuestion[]
+
+  @@index([status, createdAt(sort: Desc)])
+  @@index([exam, category, status])
+}
+
+// ─── GeneratedQuestion ────────────────────────────────────────────────────────
+// Per-question rows. Cascade-deleted with parent GeneratedTest.
+// Option E is always hardcoded server-side — never sent to or from AI.
+model GeneratedQuestion {
+  id            String        @id @default(cuid())
+  testId        String
+  test          GeneratedTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  order         Int    // 1-based
+  category      String
+  topic         String
+  difficulty    String
+
+  questionHi    String
+  optionAHi     String
+  optionBHi     String
+  optionCHi     String
+  optionDHi     String
+  optionEHi     String   @default("उत्तर नहीं देना चाहता")
+  explanationHi String
+
+  questionEn    String
+  optionAEn     String
+  optionBEn     String
+  optionCEn     String
+  optionDEn     String
+  optionEEn     String   @default("I do not want to answer")
+  explanationEn String
+
+  correctOption String   // "A" | "B" | "C" | "D" — never "E"
+
+  createdAt DateTime @default(now())
+
+  @@unique([testId, order])
+  @@index([testId])
+}
+
 // ─── TestAttempt ──────────────────────────────────────────────────────────────
 // Every submission creates a new row. Old rows are never overwritten.
 // The result snapshot (score, answers) is fixed at submission time.

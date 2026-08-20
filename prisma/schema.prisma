@@ -47,10 +47,53 @@ model GeneratedTest {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
-  questions GeneratedQuestion[]
+  questions  GeneratedQuestion[]
+  validation TestValidation?
 
   @@index([status, createdAt(sort: Desc)])
   @@index([exam, category, status])
+}
+
+// ─── TestValidation ───────────────────────────────────────────────────────────
+// Agent 2 — per-test validation snapshot. One record per test (upserted on revalidation).
+model TestValidation {
+  id               String        @id @default(cuid())
+  testId           String        @unique
+  test             GeneratedTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  totalQuestions   Int
+  passed           Int
+  failed           Int
+  reviewNeeded     Int
+  overallStatus    String   // "READY" | "VALIDATION_FAILED"
+  validationSummary String?
+
+  validatorModel   String?  // e.g. "gpt-4o"
+  validationMs     Int?
+  validatedAt      DateTime @default(now())
+
+  questionResults  QuestionValidationResult[]
+
+  @@index([testId])
+}
+
+// ─── QuestionValidationResult ─────────────────────────────────────────────────
+// Per-question result from Agent 2 validation. Cascade-deleted with TestValidation.
+model QuestionValidationResult {
+  id           String         @id @default(cuid())
+  validationId String
+  validation   TestValidation @relation(fields: [validationId], references: [id], onDelete: Cascade)
+
+  questionId   String
+  order        Int
+  status       String  // "PASS" | "FAIL" | "REVIEW"
+  confidence   Float   // 0.0 – 1.0
+  issues       Json    @default("[]")
+  suggestedFix String?
+  factualNotes String?
+
+  @@index([validationId])
+  @@index([questionId])
 }
 
 // ─── GeneratedQuestion ────────────────────────────────────────────────────────

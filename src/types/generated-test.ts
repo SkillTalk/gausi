@@ -3,6 +3,7 @@ export type GeneratedTestStatus =
   | 'DRAFT'
   | 'GENERATING'
   | 'GENERATED'
+  | 'VALIDATING'
   | 'VALIDATION_FAILED'
   | 'READY'
   | 'PUBLISHED'

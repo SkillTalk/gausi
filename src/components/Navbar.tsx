@@ -49,15 +49,24 @@ export function Navbar() {
       className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur shadow-sm"
     >
       <div className="container flex h-14 sm:h-16 items-center justify-between">
-        {/* Logo */}
+        {/* Logo — square icon on mobile, horizontal logo on desktop */}
         <Link href="/" className="flex items-center shrink-0" aria-label="GAUSI — Home">
+          {/* Mobile: square icon (compact, no text) */}
+          <Image
+            src="/branding/gausi-icon-512.png"
+            alt="GAUSI"
+            width={44}
+            height={44}
+            className="md:hidden h-9 w-9 rounded-xl"
+            priority
+          />
+          {/* Desktop: full horizontal logo */}
           <Image
             src="/branding/gausi-logo-navbar.png"
-            alt="GAUSI"
+            alt="GAUSI — Government Aspirants' Unified Study Institute"
             width={240}
             height={120}
-            // 32px on ≤360px (xs), 36px on 360-sm, 40px on sm, 44px on md+
-            className="h-8 w-auto min-[360px]:h-9 sm:h-10 md:h-11"
+            className="hidden md:block h-11 w-auto"
             priority
           />
         </Link>

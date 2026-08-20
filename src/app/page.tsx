@@ -25,30 +25,33 @@ export default function HomePage() {
         <div className="blob bottom-[-60px] right-[-60px] h-96 w-96 bg-indigo-400" style={{ animationDelay: '3s' }} aria-hidden />
         <div className="blob top-[30%] left-[40%] h-56 w-56 bg-cyan-400 opacity-20" style={{ animationDelay: '5s' }} aria-hidden />
 
-        <div className="container relative z-10 py-16 md:py-24 text-center">
+        <div className="container relative z-10 py-10 sm:py-16 md:py-24 text-center">
           <MotionSection>
-            {/* GAUSI logo in hero — larger than navbar */}
-            <div className="flex justify-center mb-6">
+            {/* GAUSI icon — square, compact, works on any bg */}
+            <div className="flex justify-center mb-4 sm:mb-5">
               <Image
-                src="/branding/gausi-logo-navbar.png"
+                src="/branding/gausi-icon-512.png"
                 alt="GAUSI"
-                width={320}
-                height={160}
-                className="h-16 sm:h-20 w-auto drop-shadow-lg"
+                width={80}
+                height={80}
+                className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl shadow-lg"
                 priority
               />
             </div>
 
-            <p className="text-white/70 text-sm sm:text-base font-medium tracking-wide mb-1">
+            <div className="mb-1">
+              <span className="text-white font-extrabold text-2xl sm:text-3xl tracking-tight">GAUSI</span>
+            </div>
+            <p className="text-white/60 text-xs sm:text-sm font-medium tracking-wide mb-4">
               {siteConfig.fullForm}
             </p>
 
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-5 mt-3">
+            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-4">
               <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
               Bihar State Exams • BPSC TRE 4
             </div>
 
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight">
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold leading-tight">
               Prepare Smarter for
               <br />
               <span className="text-cyan-300">Government Exams</span>

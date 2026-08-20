@@ -3,6 +3,7 @@
  * Returns all generated tests, newest first. No questions included (use [testId] for that).
  */
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';

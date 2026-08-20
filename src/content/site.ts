@@ -1,10 +1,11 @@
 import type { Route } from 'next';
 
 export const siteConfig = {
-  name: 'Gausi Digital',
-  tagline: 'BPSC • TRE • Bihar Exams',
+  name: 'GAUSI',
+  fullForm: "Government Aspirants' Unified Study Institute",
+  tagline: 'Learn • Practice • Succeed',
   description:
-    'Prepare smarter for BPSC TRE 4 with daily practice sets, topic-wise tests, and timed mock exams in Hindi & English.',
+    'Practice BPSC TRE and other government exam questions with daily tests, topic-wise practice, detailed results and revision tools.',
   url: 'https://gausidigital.com',
   ogImage: '/og-image.svg',
   contact: {

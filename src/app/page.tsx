@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Image from 'next/image';
 import Link from 'next/link';
 import { tre4Tests } from '@/content/exams/tre4/tests';
 import { tre4TopicGroups } from '@/content/exams/tre4/topics';
@@ -6,7 +7,7 @@ import { siteConfig } from '@/content/site';
 import { MotionSection } from '@/components/MotionSection';
 
 export const metadata: Metadata = {
-  title: 'BPSC TRE 4 Practice Portal — Daily Tests in Hindi & English',
+  title: 'GAUSI | Government Exam Preparation',
   description: siteConfig.description,
 };
 
@@ -24,9 +25,25 @@ export default function HomePage() {
         <div className="blob bottom-[-60px] right-[-60px] h-96 w-96 bg-indigo-400" style={{ animationDelay: '3s' }} aria-hidden />
         <div className="blob top-[30%] left-[40%] h-56 w-56 bg-cyan-400 opacity-20" style={{ animationDelay: '5s' }} aria-hidden />
 
-        <div className="container relative z-10 py-20 md:py-28 text-center">
+        <div className="container relative z-10 py-16 md:py-24 text-center">
           <MotionSection>
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-6">
+            {/* GAUSI logo in hero — larger than navbar */}
+            <div className="flex justify-center mb-6">
+              <Image
+                src="/branding/gausi-logo-navbar.png"
+                alt="GAUSI"
+                width={320}
+                height={160}
+                className="h-16 sm:h-20 w-auto drop-shadow-lg"
+                priority
+              />
+            </div>
+
+            <p className="text-white/70 text-sm sm:text-base font-medium tracking-wide mb-1">
+              {siteConfig.fullForm}
+            </p>
+
+            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-5 mt-3">
               <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
               Bihar State Exams • BPSC TRE 4
             </div>
@@ -34,7 +51,7 @@ export default function HomePage() {
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight">
               Prepare Smarter for
               <br />
-              <span className="text-cyan-300">BPSC TRE 4</span>
+              <span className="text-cyan-300">Government Exams</span>
             </h1>
 
             <p className="mt-6 text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">

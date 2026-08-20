@@ -12,20 +12,20 @@ const inter = Inter({ subsets: ['latin'] });
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   title: {
-    default: `${siteConfig.name} — BPSC TRE 4 Practice Portal`,
-    template: `%s | ${siteConfig.name}`,
+    default: `GAUSI | Government Exam Preparation`,
+    template: `%s | GAUSI`,
   },
   description: siteConfig.description,
   openGraph: {
     type: 'website',
     url: siteConfig.url,
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    title: `GAUSI — ${siteConfig.fullForm}`,
     description: siteConfig.description,
-    images: [{ url: siteConfig.ogImage, width: 1200, height: 630, alt: siteConfig.name }],
+    images: [{ url: siteConfig.ogImage, width: 1200, height: 630, alt: 'GAUSI' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${siteConfig.name} — ${siteConfig.tagline}`,
+    title: `GAUSI — ${siteConfig.fullForm}`,
     description: siteConfig.description,
     images: [siteConfig.ogImage],
   },
@@ -38,7 +38,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const orgLd = {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
-    name: siteConfig.name,
+    name: `GAUSI — ${siteConfig.fullForm}`,
+    alternateName: 'GAUSI',
     url: siteConfig.url,
     description: siteConfig.description,
   };

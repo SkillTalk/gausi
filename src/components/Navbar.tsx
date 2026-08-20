@@ -1,18 +1,21 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { siteConfig } from '@/content/site';
 
 export function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur shadow-sm">
-      <div className="container flex h-16 items-center justify-between">
+      <div className="container flex h-16 items-center justify-between gap-3">
         {/* Logo */}
-        <Link href="/" className="flex flex-col leading-none">
-          <span className="font-extrabold text-brand-700 tracking-tight text-lg">
-            {siteConfig.name}
-          </span>
-          <span className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">
-            {siteConfig.tagline}
-          </span>
+        <Link href="/" className="flex items-center shrink-0" aria-label="GAUSI — Home">
+          <Image
+            src="/branding/gausi-logo-navbar.png"
+            alt="GAUSI — Government Aspirants' Unified Study Institute"
+            width={240}
+            height={120}
+            className="h-9 w-auto sm:h-10 md:h-11"
+            priority
+          />
         </Link>
 
         {/* Desktop nav */}

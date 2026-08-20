@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'Gausidhi Digital Marketing privacy policy.'
+  description: 'GAUSI privacy policy — Government Aspirants\' Unified Study Institute.'
 };
 
 export default function PrivacyPage() {

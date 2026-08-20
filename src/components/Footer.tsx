@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { siteConfig } from '@/content/site';
 
@@ -7,12 +8,22 @@ export function Footer() {
       <div className="container py-10 text-sm text-slate-500">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
+            <Image
+              src="/branding/gausi-logo-navbar.png"
+              alt="GAUSI"
+              width={160}
+              height={80}
+              className="h-8 w-auto mb-2"
+            />
             <div className="font-extrabold text-brand-700 text-base">{siteConfig.name}</div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-0.5 mb-3">
+            <p className="text-xs text-slate-500 mt-0.5 mb-1 leading-snug">
+              {siteConfig.fullForm}
+            </p>
+            <p className="text-xs font-semibold text-brand-600 tracking-wide mb-3">
               {siteConfig.tagline}
             </p>
             <p className="max-w-xs leading-relaxed text-slate-500 text-sm">
-              Free daily practice tests for BPSC TRE 4 and Bihar state exams. Available in Hindi & English.
+              Free daily practice tests for BPSC TRE 4 and government exams. Available in Hindi & English.
             </p>
             <p className="mt-3">
               Email:{' '}

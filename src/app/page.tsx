@@ -30,10 +30,11 @@ export default function HomePage() {
             {/* GAUSI icon — square, compact, works on any bg */}
             <div className="flex justify-center mb-4 sm:mb-5">
               <Image
-                src="/branding/gausi-icon-512.png"
+                src="/branding/gausi-icon-192.png"
                 alt="GAUSI"
                 width={80}
                 height={80}
+                sizes="(max-width: 640px) 64px, 80px"
                 className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl shadow-lg"
                 priority
               />

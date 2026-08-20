@@ -9,11 +9,12 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           <div>
             <Image
-              src="/branding/gausi-logo-navbar.png"
+              src="/branding/gausi-icon-192.png"
               alt="GAUSI"
-              width={160}
-              height={80}
-              className="h-8 w-auto mb-2"
+              width={40}
+              height={40}
+              sizes="40px"
+              className="h-8 w-8 rounded-lg mb-2"
             />
             <div className="font-extrabold text-brand-700 text-base">{siteConfig.name}</div>
             <p className="text-xs text-slate-500 mt-0.5 mb-1 leading-snug">

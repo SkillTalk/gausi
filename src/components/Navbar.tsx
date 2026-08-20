@@ -52,23 +52,25 @@ export function Navbar() {
         {/* Logo — square icon on mobile, horizontal logo on desktop */}
         <Link href="/" className="flex items-center shrink-0" aria-label="GAUSI — Home">
           {/* Mobile: square icon (compact, no text) */}
-          <Image
-            src="/branding/gausi-icon-512.png"
-            alt="GAUSI"
-            width={44}
-            height={44}
-            className="md:hidden h-9 w-9 rounded-xl"
-            priority
-          />
-          {/* Desktop: full horizontal logo */}
-          <Image
-            src="/branding/gausi-logo-navbar.png"
-            alt="GAUSI — Government Aspirants' Unified Study Institute"
-            width={240}
-            height={120}
-            className="hidden md:block h-11 w-auto"
-            priority
-          />
+                  <Image
+                    src="/branding/gausi-icon-192.png"
+                    alt="GAUSI"
+                    width={44}
+                    height={44}
+                    sizes="44px"
+                    className="md:hidden h-9 w-9 rounded-xl"
+                    priority
+                  />
+                  {/* Desktop: full horizontal logo */}
+                  <Image
+                    src="/branding/gausi-logo-navbar.png"
+                    alt="GAUSI — Government Aspirants' Unified Study Institute"
+                    width={240}
+                    height={120}
+                    sizes="(max-width: 767px) 0px, 200px"
+                    className="hidden md:block h-11 w-auto"
+                    priority
+                  />
         </Link>
 
         {/* Desktop nav — hidden below md */}

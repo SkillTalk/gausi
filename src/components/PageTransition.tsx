@@ -1,23 +1,14 @@
-"use client";
+'use client';
 import { usePathname } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
 import { ReactNode } from 'react';
 
+// Page-change fade using existing Tailwind keyframe — no framer-motion dependency.
+// key={pathname} remounts the div on navigation, replaying the CSS animation.
 export function PageTransition({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
-    <AnimatePresence mode="wait">
-      <motion.div
-        key={pathname}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -8 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
-      >
-        {children}
-      </motion.div>
-    </AnimatePresence>
+    <div key={pathname} className="animate-fade-in">
+      {children}
+    </div>
   );
 }
-
-

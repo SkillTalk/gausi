@@ -48,6 +48,10 @@ export type TopicGroup = {
   label: string;
   labelHi: string;
   color: string; // Tailwind gradient class or hex
+  /** Canonical DB category string (matches EXAM_CATEGORIES allowlist).
+   *  Used to surface DB-published tests under this group on the topics page.
+   *  Falls back to `label` when absent. */
+  dbCategory?: string;
   topics: Topic[];
 };
 

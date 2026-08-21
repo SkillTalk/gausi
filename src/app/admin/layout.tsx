@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { LogoutButton } from '@/components/admin/LogoutButton';
 
 export const metadata: Metadata = {
   title: 'GAUSI Admin',
@@ -8,11 +9,6 @@ export const metadata: Metadata = {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Security warning banner */}
-      <div className="bg-red-600 text-white text-xs font-semibold text-center py-1.5 px-4">
-        ⚠ ADMIN AREA — Not publicly accessible. No authentication is implemented yet. Do not share this URL.
-      </div>
-
       {/* Admin header */}
       <header className="bg-slate-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
@@ -25,9 +21,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <span className="text-slate-400 text-xs ml-2">Daily Test Automation</span>
             </div>
           </div>
-          <a href="/" className="text-slate-400 hover:text-white text-xs transition-colors">
-            ← Public Site
-          </a>
+          <div className="flex items-center gap-3">
+            <a href="/" className="text-slate-400 hover:text-white text-xs transition-colors">
+              ← Public Site
+            </a>
+            <LogoutButton />
+          </div>
         </div>
       </header>
 

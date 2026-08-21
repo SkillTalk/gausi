@@ -6,15 +6,8 @@
 
 import { db } from '@/lib/db';
 import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
+import { TRE4_MARKS } from '@/content/exams/tre4/config';
 import type { ExamTest, ExamConfig, Question, CorrectOptionKey, OptionKey } from '@/types/exam';
-
-// ─── TRE4 marking scheme (standard for all generated tests) ──────────────────
-const TRE4_MARKS = {
-  correct: 1,
-  wrong: -0.25,
-  optionE: 0,
-  unanswered: -0.25,
-} as const;
 
 // ─── Difficulty mapping ───────────────────────────────────────────────────────
 function mapDifficulty(d: string): 'Beginner' | 'Intermediate' | 'Advanced' {

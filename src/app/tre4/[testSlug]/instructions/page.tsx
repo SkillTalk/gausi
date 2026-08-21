@@ -48,6 +48,14 @@ export default function InstructionsPage({ params }: PageProps) {
   const { config } = test;
   const { marks } = config;
 
+  // Format a mark value for display, converting known fractions to readable strings.
+  // e.g. -(1/3) → '-1/3'  rather than '-0.3333333333333333'
+  function formatMarkDisplay(v: number): string {
+    if (Math.abs(v - -(1 / 3)) < 1e-9) return '-1/3';
+    if (Math.abs(v - 1 / 3) < 1e-9) return '+1/3';
+    return v >= 0 ? `+${v}` : `${v}`;
+  }
+
   const handleEmailSuccess = (id: UserIdentity) => {
     setIdentity(id);
     setStep('instructions');
@@ -150,7 +158,7 @@ export default function InstructionsPage({ params }: PageProps) {
                 </div>
                 {[
                   { label: '✅ Correct answer', value: `+${marks.correct}`, colour: 'text-green-700' },
-                  { label: '❌ Wrong answer', value: `${marks.wrong}`, colour: 'text-red-700' },
+                  { label: '❌ Wrong answer', value: formatMarkDisplay(marks.wrong), colour: 'text-red-700' },
                   { label: 'E — I do not want to answer', value: `${marks.optionE === 0 ? '0 (no penalty)' : marks.optionE}`, colour: 'text-amber-700' },
                   { label: '— Not answered', value: `${marks.unanswered}`, colour: 'text-slate-600' },
                 ].map((row) => (

@@ -167,18 +167,25 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
   }
 
   // 4. Idempotency check
+  // Block only if a run already produced a test (SUCCESS, HELD_FOR_REVIEW) or is actively RUNNING.
+  // SKIPPED and FAILED runs can be retried (no test was generated).
   const istDate = options.overrideDateStr ?? getISTDateString();
   const runKey = buildRunKey(config.exam, config.category, istDate);
 
   const existingRun = await db.automationRun.findUnique({ where: { runKey } });
-  if (existingRun) {
+  if (existingRun && ['SUCCESS', 'HELD_FOR_REVIEW', 'RUNNING'].includes(existingRun.status)) {
     return {
       status: existingRun.status as AutomationRunStatus,
       runId: existingRun.id,
       runKey,
       generatedTestId: existingRun.generatedTestId ?? undefined,
-      message: `Run already exists for ${istDate} (status: ${existingRun.status}).`,
+      message: `Run already exists for ${istDate} (status: ${existingRun.status}). Test was generated.`,
     };
+  }
+
+  // If there's a prior SKIPPED/FAILED run, delete it so we can retry cleanly.
+  if (existingRun) {
+    await db.automationRun.delete({ where: { runKey } }).catch(() => {});
   }
 
   // 5. Topic repeat guard

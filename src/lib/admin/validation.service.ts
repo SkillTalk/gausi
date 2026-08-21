@@ -145,54 +145,51 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
 
   const validationSummary = deterministicSummary + aiSummary;
 
-  // 6. Upsert validation + question results
+  // 6. Upsert validation + question results — avoid interactive transaction timeout on Neon.
+  //    Delete old records, create new validation + results with createMany, then update status.
   try {
-    await db.$transaction(async (tx) => {
-      const prev = await tx.testValidation.findUnique({ where: { testId } });
-      if (prev) {
-        await tx.questionValidationResult.deleteMany({ where: { validationId: prev.id } });
-        await tx.testValidation.delete({ where: { id: prev.id } });
-      }
+    const prev = await db.testValidation.findUnique({ where: { testId } });
+    if (prev) {
+      await db.questionValidationResult.deleteMany({ where: { validationId: prev.id } });
+      await db.testValidation.delete({ where: { id: prev.id } });
+    }
 
-      const validation = await tx.testValidation.create({
-        data: {
-          testId,
-          totalQuestions: test!.questions.length,
-          passed,
-          failed,
-          reviewNeeded,
-          overallStatus,
-          validationSummary,
-          validatorModel: aiModel,
-          validationMs,
-          validatedAt: new Date(),
-          contentVersion: test!.contentVersion,
-        },
-      });
+    const validation = await db.testValidation.create({
+      data: {
+        testId,
+        totalQuestions: test!.questions.length,
+        passed,
+        failed,
+        reviewNeeded,
+        overallStatus,
+        validationSummary,
+        validatorModel: aiModel,
+        validationMs,
+        validatedAt: new Date(),
+        contentVersion: test!.contentVersion,
+      },
+    });
 
-      for (const r of mergedResults) {
-        await tx.questionValidationResult.create({
-          data: {
-            validationId: validation.id,
-            questionId: r.questionId,
-            order: r.order,
-            status: r.status,
-            confidence: r.confidence,
-            issues: r.issues as object[],
-            suggestedFix: r.suggestedFix,
-            factualNotes: r.factualNotes,
-          },
-        });
-      }
+    await db.questionValidationResult.createMany({
+      data: mergedResults.map((r) => ({
+        validationId: validation.id,
+        questionId: r.questionId,
+        order: r.order,
+        status: r.status,
+        confidence: r.confidence,
+        issues: r.issues as object[],
+        suggestedFix: r.suggestedFix ?? null,
+        factualNotes: r.factualNotes ?? null,
+      })),
+    });
 
-      await tx.generatedTest.update({
-        where: { id: testId },
-        data: { status: overallStatus },
-      });
+    await db.generatedTest.update({
+      where: { id: testId },
+      data: { status: overallStatus },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'DB write failed';
-    console.error(`[VAL_SVC:${testId}] Transaction failed:`, msg);
+    console.error(`[VAL_SVC:${testId}] DB write failed:`, msg);
     await db.generatedTest
       .update({ where: { id: testId }, data: { status: 'GENERATED' } })
       .catch(() => {});

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { GeneratedTestWithQuestions, GeneratedQuestion } from '@/types/generated-test';
 import type { StoredTestValidation, StoredQuestionValidation, ValidationIssue } from '@/types/validation';
 
-type Params = Promise<{ testId: string }>;
+type Params = { testId: string };
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 
@@ -222,7 +222,7 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminTestPreviewPage({ params }: { params: Params }) {
-  const { testId } = use(params);
+  const { testId } = params;
   const router = useRouter();
 
   const [test, setTest] = useState<GeneratedTestWithQuestions | null>(null);

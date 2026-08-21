@@ -11,10 +11,10 @@ export type GeneratedTestStatus =
   | 'ARCHIVED';
 
 // ─── Difficulty (generator-specific, different from static Difficulty in exam.ts) ──
-export type GeneratedDifficulty = 'Beginner' | 'Easy' | 'Moderate' | 'Hard' | 'Mixed';
+export type GeneratedDifficulty = 'Beginner' | 'Easy' | 'Moderate' | 'Hard' | 'Very Hard' | 'Mixed';
 
 export const GENERATED_DIFFICULTIES: GeneratedDifficulty[] = [
-  'Beginner', 'Easy', 'Moderate', 'Hard', 'Mixed',
+  'Beginner', 'Easy', 'Moderate', 'Hard', 'Very Hard', 'Mixed',
 ];
 
 export const SUPPORTED_EXAMS = ['BPSC TRE 4'] as const;

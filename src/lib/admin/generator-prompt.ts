@@ -10,6 +10,7 @@ const DIFFICULTY_INSTRUCTIONS: Record<string, string> = {
   Easy: 'Use straightforward concepts. Avoid ambiguity.',
   Moderate: 'Mix basic recall and applied understanding. Some questions may require reasoning.',
   Hard: 'Include nuanced details, date-specific facts, and multi-step reasoning.',
+  'Very Hard': 'Push the difficulty to maximum: obscure but factually accurate details, subtle distinctions between similar events/persons/dates, statement-analysis questions (e.g. "Which of the following is/are correct?"), chronology ordering, cause–effect chains, and questions that require careful reading to avoid plausible-sounding traps. All questions must remain fair and have only ONE unambiguous correct answer.',
   Mixed: 'Include a mix of Beginner, Easy, and Moderate difficulty questions spread across the set.',
 };
 
@@ -21,7 +22,7 @@ const JSON_SCHEMA = `{
       "order": 1,
       "category": "<sub-category tag, e.g. Leaders / Important Dates / Causes / Events>",
       "topic": "<specific topic of this question>",
-      "difficulty": "<Beginner | Easy | Moderate | Hard>",
+      "difficulty": "<Beginner | Easy | Moderate | Hard | Very Hard>",
       "questionHi": "<Hindi question text>",
       "optionAHi": "<Hindi option A>",
       "optionBHi": "<Hindi option B>",

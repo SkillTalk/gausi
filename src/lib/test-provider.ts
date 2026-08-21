@@ -12,7 +12,7 @@ import type { ExamTest, ExamConfig, Question, CorrectOptionKey, OptionKey } from
 // ─── Difficulty mapping ───────────────────────────────────────────────────────
 function mapDifficulty(d: string): 'Beginner' | 'Intermediate' | 'Advanced' {
   if (d === 'Beginner' || d === 'Easy') return 'Beginner';
-  if (d === 'Hard') return 'Advanced';
+  if (d === 'Hard' || d === 'Very Hard') return 'Advanced';
   return 'Intermediate'; // Moderate, Mixed
 }
 

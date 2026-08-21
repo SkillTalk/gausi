@@ -14,3 +14,4 @@ dist
 
 # Prisma generated client
 /src/generated/prisma
+.vercel

@@ -129,12 +129,18 @@ export default function AdminTestsPage() {
   return (
     <div className="space-y-10">
       {/* ─── Header ─────────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900">Daily Test Automation</h1>
-        <div className="mt-3 inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 text-xs font-semibold px-3 py-1.5 rounded-full">
-          <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-          Agent 1: Question Generator — Active
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900">Generated Tests</h1>
+          <div className="mt-3 inline-flex items-center gap-2 bg-green-50 border border-green-200 text-green-800 text-xs font-semibold px-3 py-1.5 rounded-full">
+            <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            Agent 1–4 Active
+          </div>
         </div>
+        <a href="/admin/automation"
+          className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+          ⚙ Daily Automation
+        </a>
       </div>
 
       {/* ─── Generator Form ──────────────────────────────────────────────── */}

@@ -139,6 +139,79 @@ model GeneratedQuestion {
   @@index([testId])
 }
 
+// ─── DailyAutomationConfig ────────────────────────────────────────────────────
+// Agent 4 — Single-row configuration for daily test automation.
+// Exactly one row is enforced by application logic.
+model DailyAutomationConfig {
+  id              String   @id @default(cuid())
+
+  // Test parameters
+  exam            String   @default("BPSC TRE 4")
+  category        String   @default("History")
+  topic           String   @default("")
+  difficulty      String   @default("Moderate")
+  totalQuestions  Int      @default(25)
+  durationMinutes Int      @default(15)
+
+  // Automation toggles
+  enabled         Boolean  @default(false)
+  autoPublish     Boolean  @default(true)
+  allowRepeat     Boolean  @default(false)
+
+  // Timing (IST strings — cron is fixed in vercel.json)
+  generateTime    String   @default("04:00")  // HH:MM IST
+  publishTime     String   @default("05:00")  // HH:MM IST
+  timezone        String   @default("Asia/Kolkata")
+
+  // Run tracking
+  lastRunAt       DateTime?
+  lastRunStatus   String?   // SUCCESS | FAILED | HELD_FOR_REVIEW | SKIPPED
+  nextRunAt       DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  runs            AutomationRun[]
+}
+
+// ─── AutomationRun ────────────────────────────────────────────────────────────
+// Agent 4 — Audit log for every daily automation execution.
+model AutomationRun {
+  id             String                @id @default(cuid())
+  configId       String
+  config         DailyAutomationConfig @relation(fields: [configId], references: [id])
+
+  // Idempotency key — unique per (config × calendar-day in IST)
+  runKey         String                @unique // e.g. "bpsc-tre-4-history-2026-08-21"
+  scheduledFor   DateTime              // midnight IST of the run date (stored UTC)
+
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  status         String                // RUNNING | SUCCESS | FAILED | HELD_FOR_REVIEW | SKIPPED
+
+  generatedTestId      String?
+  generationStatus     String?
+  validationStatus     String?
+  publicationStatus    String?
+
+  errorStage     String?  // GENERATION | VALIDATION | PUBLICATION | TOPIC_GUARD
+  errorMessage   String?
+
+  generationDurationMs Int?
+  validationDurationMs Int?
+
+  // Snapshot of config at run time (for history display)
+  topic          String?
+  category       String?
+  exam           String?
+  totalQuestions Int?
+
+  createdAt      DateTime @default(now())
+
+  @@index([configId, scheduledFor])
+  @@index([status])
+}
+
 // ─── TestAttempt ──────────────────────────────────────────────────────────────
 // Every submission creates a new row. Old rows are never overwritten.
 // The result snapshot (score, answers) is fixed at submission time.

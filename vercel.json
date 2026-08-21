@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/daily-test-automation",
+      "schedule": "30 22 * * *"
+    },
+    {
       "path": "/api/cron/publish-scheduled-tests",
       "schedule": "0 0 * * *"
     }

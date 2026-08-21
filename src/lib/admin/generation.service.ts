@@ -123,50 +123,47 @@ export async function generateTest(
     return { ok: false, error: `AI output schema validation failed: ${errMsg}`, stage: 'AI_CALL' };
   }
 
-  // 4. Save questions
+  // 4. Save questions — use createMany (single INSERT) + sequential update to avoid
+  //    interactive-transaction timeout on Neon (default 5 s is too short for 25 rows).
   try {
-    await db.$transaction(async (tx) => {
-      await tx.generatedTest.update({
-        where: { id: testId },
-        data: {
-          titleHi: aiResult.titleHi.trim(),
-          titleEn: aiResult.titleEn.trim(),
-          status: 'GENERATED',
-          generationMs,
-          errorMessage: null,
-        },
-      });
+    await db.generatedQuestion.createMany({
+      data: (aiResult.questions as AIQuestion[]).map((q) => ({
+        testId,
+        order: q.order,
+        category: q.category.trim(),
+        topic: q.topic.trim(),
+        difficulty: q.difficulty.trim(),
+        questionHi: q.questionHi.trim(),
+        optionAHi: q.optionAHi.trim(),
+        optionBHi: q.optionBHi.trim(),
+        optionCHi: q.optionCHi.trim(),
+        optionDHi: q.optionDHi.trim(),
+        optionEHi: OPTION_E_HI,
+        explanationHi: q.explanationHi.trim(),
+        questionEn: q.questionEn.trim(),
+        optionAEn: q.optionAEn.trim(),
+        optionBEn: q.optionBEn.trim(),
+        optionCEn: q.optionCEn.trim(),
+        optionDEn: q.optionDEn.trim(),
+        optionEEn: OPTION_E_EN,
+        explanationEn: q.explanationEn.trim(),
+        correctOption: q.correctOption.trim().toUpperCase(),
+      })),
+    });
 
-      for (const q of aiResult.questions as AIQuestion[]) {
-        await tx.generatedQuestion.create({
-          data: {
-            testId,
-            order: q.order,
-            category: q.category.trim(),
-            topic: q.topic.trim(),
-            difficulty: q.difficulty.trim(),
-            questionHi: q.questionHi.trim(),
-            optionAHi: q.optionAHi.trim(),
-            optionBHi: q.optionBHi.trim(),
-            optionCHi: q.optionCHi.trim(),
-            optionDHi: q.optionDHi.trim(),
-            optionEHi: OPTION_E_HI,
-            explanationHi: q.explanationHi.trim(),
-            questionEn: q.questionEn.trim(),
-            optionAEn: q.optionAEn.trim(),
-            optionBEn: q.optionBEn.trim(),
-            optionCEn: q.optionCEn.trim(),
-            optionDEn: q.optionDEn.trim(),
-            optionEEn: OPTION_E_EN,
-            explanationEn: q.explanationEn.trim(),
-            correctOption: q.correctOption.trim().toUpperCase(),
-          },
-        });
-      }
+    await db.generatedTest.update({
+      where: { id: testId },
+      data: {
+        titleHi: aiResult.titleHi.trim(),
+        titleEn: aiResult.titleEn.trim(),
+        status: 'GENERATED',
+        generationMs,
+        errorMessage: null,
+      },
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'DB write failed';
-    console.error(`[GEN_SVC:${testId}] Transaction failed:`, msg);
+    console.error(`[GEN_SVC:${testId}] DB write failed:`, msg);
     await db.generatedQuestion.deleteMany({ where: { testId } }).catch(() => {});
     await markFailed(testId, `DB write failed: ${msg}`);
     return { ok: false, error: `Failed to save questions: ${msg}`, stage: 'DB_WRITE' };

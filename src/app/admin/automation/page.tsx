@@ -19,9 +19,23 @@ type AutomationConfig = {
   generateTime: string;
   publishTime: string;
   timezone: string;
+  topicMode: string;   // "MANUAL" | "QUEUE"
   lastRunAt: string | null;
   lastRunStatus: string | null;
   nextRunAt: string | null;
+};
+
+type NextTopic = {
+  id: string;
+  exam: string;
+  category: string;
+  topic: string;
+  priority: number;
+  lastUsedAt: string | null;
+  timesUsed: number;
+  difficultyDefault: string | null;
+  questionCountDefault: number | null;
+  durationMinutesDefault: number | null;
 };
 
 type AutomationRun = {
@@ -127,6 +141,7 @@ export default function AutomationPage() {
   const [running, setRunning] = useState(false);
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [runMsg, setRunMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [nextTopic, setNextTopic] = useState<NextTopic | null>(null);
 
   // Form state mirrors config
   const [form, setForm] = useState<Omit<AutomationConfig, 'id' | 'lastRunAt' | 'lastRunStatus' | 'nextRunAt'>>({
@@ -142,6 +157,7 @@ export default function AutomationPage() {
     generateTime: '04:00',
     publishTime: '05:00',
     timezone: 'Asia/Kolkata',
+    topicMode: 'MANUAL',
   });
 
   const loadData = useCallback(async () => {
@@ -155,6 +171,7 @@ export default function AutomationPage() {
 
       if (cfgData.config) {
         setConfig(cfgData.config);
+        const tm = cfgData.config.topicMode ?? 'MANUAL';
         setForm({
           exam: cfgData.config.exam,
           category: cfgData.config.category,
@@ -168,7 +185,14 @@ export default function AutomationPage() {
           generateTime: cfgData.config.generateTime,
           publishTime: cfgData.config.publishTime,
           timezone: cfgData.config.timezone,
+          topicMode: tm,
         });
+        // Fetch next topic preview for QUEUE mode
+        if (tm === 'QUEUE') {
+          const nRes = await fetch(`/api/admin/topics/next?exam=${encodeURIComponent(cfgData.config.exam)}&allowRepeat=${cfgData.config.allowRepeat}`);
+          const nData = await nRes.json() as { topic?: NextTopic | null };
+          setNextTopic(nData.topic ?? null);
+        }
       }
       setRuns(runsData.runs ?? []);
     } catch {
@@ -273,6 +297,7 @@ export default function AutomationPage() {
       <div>
         <div className="flex items-center gap-3 mb-1">
           <Link href="/admin/tests" className="text-sm text-slate-400 hover:text-slate-700">← Tests</Link>
+          <Link href="/admin/topics" className="text-sm text-brand-600 hover:text-brand-800 font-semibold border border-brand-200 px-3 py-1 rounded-lg">📋 Topic Queue</Link>
           <span className="text-slate-300">/</span>
           <span className="text-sm text-slate-700 font-medium">Automation</span>
         </div>
@@ -336,7 +361,7 @@ export default function AutomationPage() {
           <div className="flex flex-col gap-2">
             <button
               onClick={() => { void handleRunNow(); }}
-              disabled={running || !config?.topic?.trim()}
+              disabled={running || (form.topicMode === 'MANUAL' && !config?.topic?.trim())}
               className="text-sm font-bold px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white disabled:opacity-50 transition-colors"
             >
               {running ? '⟳ Running…' : '▶ Run Now'}
@@ -437,22 +462,61 @@ export default function AutomationPage() {
               </select>
             </div>
 
-            {/* Topic */}
-            <div className="sm:col-span-2">
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                Topic for Next Daily Test
-                {config?.lastRunStatus === 'SUCCESS' && config.topic === form.topic && (
-                  <span className="ml-2 text-xs font-normal text-amber-600">⚠ This topic was used in the last run</span>
-                )}
-              </label>
-              <input
-                type="text"
-                value={form.topic}
-                onChange={(e) => setField('topic', e.target.value)}
-                placeholder="e.g. Indian National Movement, Photosynthesis, Indian Rivers"
-                maxLength={200}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              />
+            {/* Topic Source */}
+            <div className="sm:col-span-2 space-y-3">
+              <label className="block text-sm font-semibold text-slate-700">Topic Source</label>
+              <div className="flex gap-3">
+                {(['MANUAL', 'QUEUE'] as const).map((mode) => (
+                  <button key={mode} type="button"
+                    onClick={() => setField('topicMode', mode)}
+                    className={`flex-1 py-2 rounded-lg border text-sm font-semibold transition-colors ${form.topicMode === mode
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                  >
+                    {mode === 'MANUAL' ? '✏ Manual Topic' : '📋 Topic Queue (Agent 5)'}
+                  </button>
+                ))}
+              </div>
+
+              {form.topicMode === 'MANUAL' ? (
+                <div>
+                  <input
+                    type="text"
+                    value={form.topic}
+                    onChange={(e) => setField('topic', e.target.value)}
+                    placeholder="e.g. Indian National Movement, Photosynthesis, Indian Rivers"
+                    maxLength={200}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                  {config?.lastRunStatus === 'SUCCESS' && config.topic === form.topic && (
+                    <p className="text-xs text-amber-600 mt-1">⚠ This topic was used in the last run</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-brand-50 border border-brand-100 rounded-xl p-4">
+                  {nextTopic ? (
+                    <div className="space-y-1">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <p className="text-xs text-slate-500">Next Suggested Topic</p>
+                          <p className="font-bold text-brand-700 text-base">{nextTopic.topic}</p>
+                          <p className="text-xs text-slate-600">{nextTopic.category} · Priority {nextTopic.priority} · Used {nextTopic.timesUsed}×</p>
+                        </div>
+                        <Link href="/admin/topics"
+                          className="text-xs text-brand-600 hover:underline font-semibold border border-brand-200 px-2 py-1 rounded-lg">
+                          View Queue →
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-amber-700">⚠ No eligible topic in queue</p>
+                      <Link href="/admin/topics"
+                        className="text-xs text-brand-600 hover:underline font-semibold">Add topics →</Link>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Difficulty */}

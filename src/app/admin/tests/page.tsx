@@ -137,10 +137,16 @@ export default function AdminTestsPage() {
             Agent 1–4 Active
           </div>
         </div>
-        <a href="/admin/automation"
-          className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-          ⚙ Daily Automation
-        </a>
+        <div className="flex gap-2">
+          <a href="/admin/topics"
+            className="inline-flex items-center gap-2 border border-brand-300 text-brand-700 text-sm font-semibold px-4 py-2 rounded-xl transition-colors hover:bg-brand-50">
+            📋 Topics
+          </a>
+          <a href="/admin/automation"
+            className="inline-flex items-center gap-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+            ⚙ Automation
+          </a>
+        </div>
       </div>
 
       {/* ─── Generator Form ──────────────────────────────────────────────── */}

@@ -158,6 +158,9 @@ model DailyAutomationConfig {
   autoPublish     Boolean  @default(true)
   allowRepeat     Boolean  @default(false)
 
+  // Agent 5 — Topic source mode
+  topicMode       String   @default("MANUAL")  // "MANUAL" | "QUEUE"
+
   // Timing (IST strings — cron is fixed in vercel.json)
   generateTime    String   @default("04:00")  // HH:MM IST
   publishTime     String   @default("05:00")  // HH:MM IST
@@ -206,10 +209,57 @@ model AutomationRun {
   exam           String?
   totalQuestions Int?
 
+  // Agent 5 — Topic Planner tracking
+  selectedTopicId      String?  // FK to ExamTopic (soft ref — no Prisma relation to keep migration simple)
+  topicSelectionSource String?  // "MANUAL" | "QUEUE"
+
   createdAt      DateTime @default(now())
 
   @@index([configId, scheduledFor])
   @@index([status])
+}
+
+// ─── ExamTopic ────────────────────────────────────────────────────────────────
+// Agent 5 — Topic Planner queue. Admin maintains this list; Agent 5 picks the
+// next eligible topic for each daily automation run.
+//
+// Topic consumption rules (documented here for consistency):
+//   • Generation fails before test is created → lastUsedAt NOT updated
+//   • Generation succeeds (test created) → lastUsedAt IS updated, timesUsed++
+//     even if validation later fails — a complete paper was generated.
+model ExamTopic {
+  id    String @id @default(cuid())
+  exam  String // e.g. "BPSC TRE 4"
+  category String // e.g. "History"
+  topic    String // e.g. "Revolt of 1857"
+  slug     String @unique // URL-safe identifier
+
+  // Per-topic defaults (null = fall back to DailyAutomationConfig)
+  difficultyDefault      String? // "Beginner" | "Easy" | "Moderate" | "Hard" | "Mixed"
+  questionCountDefault   Int?
+  durationMinutesDefault Int?
+
+  // Queue behaviour
+  priority         Int      @default(50)   // higher number = higher priority (100=high, 50=normal, 10=low)
+  sequenceOrder    Int?                    // optional manual ordering within same priority
+  cooldownDays     Int      @default(30)   // days before topic can repeat
+  earliestUseDate  DateTime?               // do not select before this date
+  preferredDayOfWeek Int?                  // 0=Sun…6=Sat, null=any
+  notes            String?
+
+  // State
+  enabled Boolean @default(true)
+  status  String  @default("ACTIVE") // "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED"
+
+  // Usage tracking
+  lastUsedAt DateTime?
+  timesUsed  Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([exam, status, priority(sort: Desc)])
+  @@index([exam, category, status])
 }
 
 // ─── TestAttempt ──────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import { generateTest } from '@/lib/admin/generation.service';
 import { validateTest } from '@/lib/admin/validation.service';
 import { scheduleTest, publishTest } from '@/lib/admin/publish.service';
 import { validateGenerateInput, sanitizeInput } from '@/lib/admin/admin-validator';
+import { getNextEligibleTopic, markTopicUsed } from '@/lib/admin/topic-planner.service';
 import type { GenerateTestInput } from '@/types/generated-test';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -110,6 +111,7 @@ export async function upsertAutomationConfig(
     generateTime: string;
     publishTime: string;
     timezone: string;
+    topicMode: string;
   }>,
 ) {
   const existing = await getAutomationConfig();
@@ -161,16 +163,45 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
     return { status: 'SKIPPED', message: 'Automation is disabled.' };
   }
 
-  // 3. Validate topic is set
-  if (!config.topic.trim()) {
-    return { status: 'SKIPPED', message: 'No topic configured. Set the topic for the next daily test.' };
+  // 3. Resolve topic (MANUAL vs QUEUE)
+  const topicMode = (config as Record<string, unknown>).topicMode as string ?? 'MANUAL';
+  let resolvedTopic = config.topic;
+  let resolvedCategory = config.category;
+  let resolvedDifficulty = config.difficulty;
+  let resolvedQuestions = config.totalQuestions;
+  let resolvedDuration = config.durationMinutes;
+  let selectedTopicId: string | null = null;
+  const topicSelectionSource = topicMode === 'QUEUE' ? 'QUEUE' : 'MANUAL';
+
+  if (topicMode === 'QUEUE') {
+    const nextTopic = await getNextEligibleTopic({
+      exam: config.exam,
+      allowRepeat: config.allowRepeat,
+    });
+    if (!nextTopic) {
+      return {
+        status: 'SKIPPED',
+        message: 'No eligible topic in queue. Add topics or adjust cooldown settings.',
+      };
+    }
+    resolvedTopic = nextTopic.topic;
+    resolvedCategory = nextTopic.category;
+    resolvedDifficulty = nextTopic.difficultyDefault ?? config.difficulty;
+    resolvedQuestions = nextTopic.questionCountDefault ?? config.totalQuestions;
+    resolvedDuration = nextTopic.durationMinutesDefault ?? config.durationMinutes;
+    selectedTopicId = nextTopic.id;
+  } else {
+    // MANUAL mode — topic must be set
+    if (!config.topic.trim()) {
+      return { status: 'SKIPPED', message: 'No topic configured. Set the topic for the next daily test.' };
+    }
   }
 
   // 4. Idempotency check
   // Block only if a run already produced a test (SUCCESS, HELD_FOR_REVIEW) or is actively RUNNING.
   // SKIPPED and FAILED runs can be retried (no test was generated).
   const istDate = options.overrideDateStr ?? getISTDateString();
-  const runKey = buildRunKey(config.exam, config.category, istDate);
+  const runKey = buildRunKey(config.exam, resolvedCategory, istDate);
 
   const existingRun = await db.automationRun.findUnique({ where: { runKey } });
   if (existingRun && ['SUCCESS', 'HELD_FOR_REVIEW', 'RUNNING'].includes(existingRun.status)) {
@@ -188,9 +219,9 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
     await db.automationRun.delete({ where: { runKey } }).catch(() => {});
   }
 
-  // 5. Topic repeat guard
-  if (!config.allowRepeat) {
-    const alreadyUsed = await isTopicRecentlyUsed(config.topic, config.category, config.exam);
+  // 5. Topic repeat guard (MANUAL mode only — QUEUE mode already applies cooldown in selection)
+  if (topicMode === 'MANUAL' && !config.allowRepeat) {
+    const alreadyUsed = await isTopicRecentlyUsed(resolvedTopic, resolvedCategory, config.exam);
     if (alreadyUsed) {
       const run = await db.automationRun.create({
         data: {
@@ -201,11 +232,12 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
           finishedAt: new Date(),
           status: 'SKIPPED',
           errorStage: 'TOPIC_GUARD',
-          errorMessage: `Topic "${config.topic}" was used in the last ${TOPIC_LOOKBACK_DAYS} days. Set "Allow Repeat" to override.`,
-          topic: config.topic,
-          category: config.category,
+          errorMessage: `Topic "${resolvedTopic}" was used in the last ${TOPIC_LOOKBACK_DAYS} days. Set "Allow Repeat" to override.`,
+          topic: resolvedTopic,
+          category: resolvedCategory,
           exam: config.exam,
-          totalQuestions: config.totalQuestions,
+          totalQuestions: resolvedQuestions,
+          topicSelectionSource,
         },
       });
       await db.dailyAutomationConfig.update({
@@ -216,7 +248,7 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
         status: 'SKIPPED',
         runId: run.id,
         runKey,
-        message: `Topic "${config.topic}" was recently used. Change the topic or enable Allow Repeat.`,
+        message: `Topic "${resolvedTopic}" was recently used. Change the topic or enable Allow Repeat.`,
       };
     }
   }
@@ -230,20 +262,22 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
       scheduledFor,
       startedAt: new Date(),
       status: 'RUNNING',
-      topic: config.topic,
-      category: config.category,
+      topic: resolvedTopic,
+      category: resolvedCategory,
       exam: config.exam,
-      totalQuestions: config.totalQuestions,
+      totalQuestions: resolvedQuestions,
+      selectedTopicId,
+      topicSelectionSource,
     },
   });
 
   const input: GenerateTestInput = {
     exam: config.exam as GenerateTestInput['exam'],
-    category: config.category,
-    topic: config.topic,
-    difficulty: config.difficulty as GenerateTestInput['difficulty'],
-    totalQuestions: config.totalQuestions,
-    durationMinutes: config.durationMinutes,
+    category: resolvedCategory,
+    topic: resolvedTopic,
+    difficulty: resolvedDifficulty as GenerateTestInput['difficulty'],
+    totalQuestions: resolvedQuestions,
+    durationMinutes: resolvedDuration,
   };
 
   // Validate input shape (reuse Agent 1 validator)
@@ -284,6 +318,14 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
       generationDurationMs: genResult.generationMs,
     },
   });
+
+  // Mark topic used now that a test record exists (per consumption rules).
+  // Do NOT await in a way that blocks the rest — but errors should not fail the run.
+  if (selectedTopicId) {
+    await markTopicUsed(selectedTopicId).catch((err) => {
+      console.warn('[AUTOMATION] Failed to mark topic used:', err instanceof Error ? err.message : err);
+    });
+  }
 
   // 8. Validate test
   const valResult = await validateTest(genResult.testId, apiKey);

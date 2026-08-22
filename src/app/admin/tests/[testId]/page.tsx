@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import type { GeneratedTestWithQuestions, GeneratedQuestion } from '@/types/generated-test';
 import type { StoredTestValidation, StoredQuestionValidation, ValidationIssue } from '@/types/validation';
+import type { RepairMode } from '@/lib/admin/repair.service';
 
 type Params = { testId: string };
 
@@ -61,6 +62,155 @@ function IssueRow({ issue }: { issue: ValidationIssue }) {
   );
 }
 
+// ─── Repair Modal ─────────────────────────────────────────────────────────────
+
+type RepairModalProps = {
+  testId: string;
+  question: GeneratedQuestion;
+  qVal: StoredQuestionValidation;
+  onClose: () => void;
+  onRepaired: () => void;
+};
+
+function RepairModal({ testId, question, qVal, onClose, onRepaired }: RepairModalProps) {
+  const [mode, setMode] = useState<RepairMode>('AUTO_FIX');
+  const [instruction, setInstruction] = useState('');
+  const [repairing, setRepairing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const issues = qVal.issues as ValidationIssue[];
+
+  async function handleRepair() {
+    setRepairing(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/tests/${testId}/questions/${question.id}/repair`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repairMode: mode,
+            instruction: instruction.trim() || undefined,
+          }),
+        },
+      );
+      const data = await res.json() as { error?: string; message?: string };
+      if (!res.ok) {
+        setError(data.error ?? 'Repair failed. Please try again.');
+        return;
+      }
+      onRepaired();
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setRepairing(false);
+    }
+  }
+
+  return (
+    /* Overlay */
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
+        <div className="flex items-start justify-between">
+          <h2 className="text-base font-extrabold text-slate-900">Fix / Regenerate Question</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+        </div>
+
+        {/* Validator feedback */}
+        {issues.length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Problem</p>
+            {issues.map((issue, i) => (
+              <div key={i} className={`text-xs rounded px-2 py-1.5 ${
+                issue.severity === 'ERROR' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
+              }`}>
+                <span className="font-semibold">[{issue.type}]</span> {issue.message}
+              </div>
+            ))}
+          </div>
+        )}
+        {qVal.suggestedFix && (
+          <div className="text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
+            <span className="font-semibold text-slate-600">Suggested fix: </span>
+            {qVal.suggestedFix}
+          </div>
+        )}
+
+        {/* Repair mode */}
+        <div>
+          <p className="text-xs font-semibold text-slate-600 mb-2">Repair Mode</p>
+          <div className="flex gap-2">
+            {(['AUTO_FIX', 'REPLACE'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
+                  mode === m
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {m === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace with New'}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs text-slate-400 mt-1.5">
+            {mode === 'AUTO_FIX'
+              ? 'Rewrite the existing question to fix the issue, preserving the learning objective.'
+              : 'Discard the question and generate a fresh one on the same topic.'}
+          </p>
+        </div>
+
+        {/* Optional admin instruction */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">
+            Additional Instruction (optional)
+          </label>
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={3}
+            maxLength={500}
+            placeholder={`e.g. Keep the question focused on South African Satyagraha, not Mandela.`}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+          <p className="text-xs text-slate-400 mt-0.5">{instruction.length}/500</p>
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={() => { void handleRepair(); }}
+            disabled={repairing}
+            className="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {repairing ? 'Repairing…' : mode === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace Question'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={repairing}
+            className="px-4 py-2.5 border border-slate-300 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Option row ───────────────────────────────────────────────────────────────
 
 function OptionRow({ letter, hi, en, isCorrect }: { letter: string; hi: string; en: string; isCorrect: boolean }) {
@@ -86,14 +236,19 @@ function QuestionCard({
   q,
   index,
   qVal,
+  onRepair,
+  isPublished,
 }: {
   q: GeneratedQuestion;
   index: number;
   qVal?: StoredQuestionValidation;
+  onRepair?: (q: GeneratedQuestion, qv: StoredQuestionValidation) => void;
+  isPublished: boolean;
 }) {
   const [showDetails, setShowDetails] = useState(false);
 
   const hasIssues = qVal && (qVal.issues as ValidationIssue[]).length > 0;
+  const canRepair = !isPublished && qVal && (qVal.status === 'FAIL' || qVal.status === 'REVIEW');
 
   return (
     <div className={`bg-white border rounded-xl p-5 space-y-4 ${
@@ -137,17 +292,29 @@ function QuestionCard({
       {/* Validation details (only for FAIL / REVIEW) */}
       {qVal && qVal.status !== 'PASS' && (
         <div className="pl-10 pt-2 border-t border-slate-100 space-y-2">
-          <button
-            onClick={() => setShowDetails((p) => !p)}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
-          >
-            {showDetails ? '▲' : '▼'} Validation details
-            {hasIssues && (
-              <span className="ml-1 text-xs text-slate-400">
-                ({(qVal.issues as ValidationIssue[]).length} issue{(qVal.issues as ValidationIssue[]).length > 1 ? 's' : ''})
-              </span>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <button
+              onClick={() => setShowDetails((p) => !p)}
+              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+            >
+              {showDetails ? '▲' : '▼'} Validation details
+              {hasIssues && (
+                <span className="ml-1 text-xs text-slate-400">
+                  ({(qVal.issues as ValidationIssue[]).length} issue{(qVal.issues as ValidationIssue[]).length > 1 ? 's' : ''})
+                </span>
+              )}
+            </button>
+
+            {/* ── Repair button (FAIL / REVIEW only, not on PUBLISHED tests) ── */}
+            {canRepair && onRepair && (
+              <button
+                onClick={() => onRepair(q, qVal)}
+                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+              >
+                🔧 Fix / Regenerate Question
+              </button>
             )}
-          </button>
+          </div>
 
           {showDetails && (
             <div className="space-y-1.5">
@@ -241,6 +408,11 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [publishMsg, setPublishMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // ── Repair state ────────────────────────────────────────────────────────────
+  type RepairTarget = { question: GeneratedQuestion; qVal: StoredQuestionValidation };
+  const [repairTarget, setRepairTarget] = useState<RepairTarget | null>(null);
+  const [repairBanner, setRepairBanner] = useState<string | null>(null);
+
   // Build a lookup map: questionId → validation result
   const valByQuestionId = new Map<string, StoredQuestionValidation>();
   if (validation) {
@@ -249,21 +421,21 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     }
   }
 
-  function reloadTest() {
+  const reloadTest = useCallback(() => {
     return fetch(`/api/admin/tests/${testId}`)
       .then((r) => r.json() as Promise<{ test?: GeneratedTestWithQuestions; error?: string }>)
       .then((d) => {
         if (d.test) setTest(d.test);
       });
-  }
+  }, [testId]);
 
-  function reloadValidation() {
+  const reloadValidation = useCallback(() => {
     return fetch(`/api/admin/tests/${testId}/validation`)
       .then((r) => r.json() as Promise<{ validation?: StoredTestValidation | null }>)
       .then((d) => {
         setValidation(d.validation ?? null);
       });
-  }
+  }, [testId]);
 
   useEffect(() => {
     Promise.all([
@@ -423,6 +595,13 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     }
   }
 
+  async function handleRepairSuccess() {
+    setRepairTarget(null);
+    setRepairBanner('Question repaired. Revalidation required before publishing.');
+    // Reload both test (to show updated question) and validation (now stale)
+    await Promise.all([reloadTest(), reloadValidation()]);
+  }
+
   if (loading) {
     return <div className="text-center py-20 text-slate-400">Loading test preview...</div>;
   }
@@ -564,6 +743,22 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
         <ValidationSummaryPanel validation={validation} />
       )}
 
+      {/* ── Post-repair banner ──────────────────────────────────────────── */}
+      {repairBanner && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-amber-600 text-lg">🔧</span>
+            <p className="text-sm font-semibold text-amber-800">{repairBanner}</p>
+          </div>
+          <button
+            onClick={() => setRepairBanner(null)}
+            className="text-amber-400 hover:text-amber-700 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* ── Publish / Schedule Panel ─────────────────────────────────────── */}
       {(canPublishNow || canSchedule || canCancelSchedule || canArchive || isPublished) && (
         <div className={`rounded-xl border p-5 space-y-4 ${
@@ -693,10 +888,23 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               q={q}
               index={i}
               qVal={valByQuestionId.get(q.id)}
+              isPublished={isPublished}
+              onRepair={(question, qv) => setRepairTarget({ question, qVal: qv })}
             />
           ))}
         </div>
       </div>
+
+      {/* ── Repair Modal ─────────────────────────────────────────────────── */}
+      {repairTarget && (
+        <RepairModal
+          testId={testId}
+          question={repairTarget.question}
+          qVal={repairTarget.qVal}
+          onClose={() => setRepairTarget(null)}
+          onRepaired={() => { void handleRepairSuccess(); }}
+        />
+      )}
     </div>
   );
 }

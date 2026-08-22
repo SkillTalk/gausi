@@ -262,6 +262,27 @@ model ExamTopic {
   @@index([exam, category, status])
 }
 
+// ─── QuestionRepairLog ────────────────────────────────────────────────────────
+// Audit trail for single-question repair/regeneration (per requirement §6).
+// Preserves the previous and repaired question snapshots as JSON blobs so no
+// data is ever silently lost.
+model QuestionRepairLog {
+  id                String   @id @default(cuid())
+  testId            String
+  questionId        String
+  repairMode        String   // "AUTO_FIX" | "REPLACE"
+  previousSnapshot  Json     // full GeneratedQuestion fields before repair
+  repairedSnapshot  Json     // full GeneratedQuestion fields after repair
+  validatorIssue    String?  // joined issue messages from QuestionValidationResult
+  suggestedFix      String?  // from QuestionValidationResult.suggestedFix
+  adminInstruction  String?  // optional note provided by the admin
+  model             String?  // e.g. "gpt-4o"
+  createdAt         DateTime @default(now())
+
+  @@index([testId])
+  @@index([questionId])
+}
+
 // ─── TestAttempt ──────────────────────────────────────────────────────────────
 // Every submission creates a new row. Old rows are never overwritten.
 // The result snapshot (score, answers) is fixed at submission time.

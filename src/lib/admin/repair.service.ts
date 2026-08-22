@@ -1,0 +1,426 @@
+/**
+ * Repair Service — single-question repair/regeneration (per user requirement §2–§7).
+ *
+ * Repairs ONE failing question without touching any other question in the test.
+ * Preserves question order, all other question data, IDs, and positions.
+ *
+ * After a successful repair:
+ *   - The question row is updated in-place (same id, same order).
+ *   - A QuestionRepairLog entry is created for auditability.
+ *   - GeneratedTest.contentVersion is incremented.
+ *   - Test status is set to GENERATED (old validation is now stale).
+ *
+ * The test must be revalidated (Agent 2) before it can be published.
+ *
+ * Server-only. Never import in client components.
+ */
+
+import { db } from '@/lib/db';
+import {
+  buildRepairSystemPrompt,
+  buildRepairUserPrompt,
+  type RepairMode,
+  type RepairPromptContext,
+} from '@/lib/admin/repair-prompt';
+import type { ValidationIssue } from '@/types/validation';
+
+const OPENAI_MODEL = 'gpt-4o';
+const OPTION_E_HI = 'उत्तर नहीं देना चाहता';
+const OPTION_E_EN = 'I do not want to answer';
+
+// Statuses that allow repair (test must not be immutable).
+const REPAIRABLE_STATUSES = new Set([
+  'GENERATED',
+  'VALIDATION_FAILED',
+  'READY',
+  'VALIDATING', // allow repair even if validation is in progress (admin UI should warn)
+]);
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type { RepairMode };
+
+export type RepairedQuestionData = {
+  questionHi: string;
+  questionEn: string;
+  optionAHi: string;
+  optionBHi: string;
+  optionCHi: string;
+  optionDHi: string;
+  optionAEn: string;
+  optionBEn: string;
+  optionCEn: string;
+  optionDEn: string;
+  explanationHi: string;
+  explanationEn: string;
+  correctOption: string;
+};
+
+export type RepairSuccess = {
+  ok: true;
+  questionId: string;
+  repairLogId: string;
+  repairedQuestion: RepairedQuestionData;
+};
+
+export type RepairFailure = {
+  ok: false;
+  error: string;
+  stage: 'LOAD' | 'STATUS_CHECK' | 'AI_CALL' | 'STRUCT_CHECK' | 'DB_WRITE';
+};
+
+export type RepairResult = RepairSuccess | RepairFailure;
+
+// ─── Structural validation ────────────────────────────────────────────────────
+
+const REQUIRED_TEXT_FIELDS: (keyof RepairedQuestionData)[] = [
+  'questionHi',
+  'questionEn',
+  'optionAHi',
+  'optionBHi',
+  'optionCHi',
+  'optionDHi',
+  'optionAEn',
+  'optionBEn',
+  'optionCEn',
+  'optionDEn',
+  'explanationHi',
+  'explanationEn',
+];
+
+export function validateRepairedQuestion(
+  q: Record<string, unknown>,
+  /** Texts of all OTHER questions (Hindi + English) to check for duplicates. */
+  existingTexts: string[],
+): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  // Check all required text fields
+  for (const field of REQUIRED_TEXT_FIELDS) {
+    const val = q[field];
+    if (!val || typeof val !== 'string' || !val.trim()) {
+      errors.push(`${field} is required and must be a non-empty string.`);
+    }
+  }
+
+  // correctOption must be A–D
+  const co = typeof q.correctOption === 'string' ? q.correctOption.trim().toUpperCase() : '';
+  if (!['A', 'B', 'C', 'D'].includes(co)) {
+    errors.push(`correctOption must be A, B, C, or D (got: "${String(q.correctOption ?? '')}")`);
+  }
+
+  // Duplicate question text check
+  const qHi = typeof q.questionHi === 'string' ? q.questionHi.trim().toLowerCase() : '';
+  const qEn = typeof q.questionEn === 'string' ? q.questionEn.trim().toLowerCase() : '';
+  for (const existing of existingTexts) {
+    const ex = existing.trim().toLowerCase();
+    if (ex && (ex === qHi || ex === qEn)) {
+      errors.push('Repaired question text duplicates an existing question in this test.');
+      break;
+    }
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ─── Core repair function ─────────────────────────────────────────────────────
+
+export async function repairQuestion(
+  testId: string,
+  questionId: string,
+  repairMode: RepairMode,
+  adminInstruction: string | undefined,
+  apiKey: string,
+): Promise<RepairResult> {
+  // ── 1. Load test + all questions ─────────────────────────────────────────
+  let test: {
+    id: string;
+    exam: string;
+    category: string;
+    topic: string;
+    difficulty: string;
+    titleEn: string;
+    status: string;
+    contentVersion: number;
+    questions: Array<{
+      id: string;
+      order: number;
+      questionHi: string;
+      questionEn: string;
+      optionAHi: string;
+      optionBHi: string;
+      optionCHi: string;
+      optionDHi: string;
+      optionEHi: string;
+      optionAEn: string;
+      optionBEn: string;
+      optionCEn: string;
+      optionDEn: string;
+      optionEEn: string;
+      explanationHi: string;
+      explanationEn: string;
+      correctOption: string;
+      category: string;
+      topic: string;
+      difficulty: string;
+    }>;
+  } | null;
+
+  try {
+    test = await db.generatedTest.findUnique({
+      where: { id: testId },
+      include: { questions: { orderBy: { order: 'asc' } } },
+    }) as typeof test;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'DB load error';
+    return { ok: false, error: `Failed to load test: ${msg}`, stage: 'LOAD' };
+  }
+
+  if (!test) {
+    return { ok: false, error: `Test not found: ${testId}`, stage: 'LOAD' };
+  }
+
+  // ── 2. Status check ───────────────────────────────────────────────────────
+  if (test.status === 'PUBLISHED') {
+    return {
+      ok: false,
+      error: 'Published tests are immutable. Archive and create a new revision if a correction is needed.',
+      stage: 'STATUS_CHECK',
+    };
+  }
+
+  if (test.status === 'ARCHIVED') {
+    return {
+      ok: false,
+      error: 'Archived tests cannot be repaired.',
+      stage: 'STATUS_CHECK',
+    };
+  }
+
+  if (!REPAIRABLE_STATUSES.has(test.status)) {
+    return {
+      ok: false,
+      error: `Test status "${test.status}" does not allow repair. Must be GENERATED, VALIDATION_FAILED, or READY.`,
+      stage: 'STATUS_CHECK',
+    };
+  }
+
+  // ── 3. Find the specific question ─────────────────────────────────────────
+  const targetQuestion = test.questions.find((q) => q.id === questionId);
+  if (!targetQuestion) {
+    return {
+      ok: false,
+      error: `Question ${questionId} not found in test ${testId}.`,
+      stage: 'LOAD',
+    };
+  }
+
+  // ── 4. Load validation result for this question (optional) ───────────────
+  let valIssues: ValidationIssue[] = [];
+  let suggestedFix: string | null = null;
+  let factualNotes: string | null = null;
+  let qValStatus: string | null = null;
+
+  try {
+    const testValidation = await db.testValidation.findUnique({ where: { testId } });
+    if (testValidation) {
+      const qv = await db.questionValidationResult.findFirst({
+        where: { validationId: testValidation.id, questionId },
+      });
+      if (qv) {
+        valIssues = (qv.issues as ValidationIssue[]) ?? [];
+        suggestedFix = qv.suggestedFix;
+        factualNotes = qv.factualNotes;
+        qValStatus = qv.status;
+      }
+    }
+  } catch {
+    // Validation result unavailable — proceed without context.
+  }
+
+  // Block repair of questions that passed validation.
+  if (qValStatus === 'PASS') {
+    return {
+      ok: false,
+      error: 'This question passed validation and does not need repair. Only FAIL or REVIEW questions can be repaired.',
+      stage: 'STATUS_CHECK',
+    };
+  }
+
+  // ── 5. Build existing question texts for deduplication ───────────────────
+  const existingTexts = test.questions
+    .filter((q) => q.id !== questionId)
+    .flatMap((q) => [q.questionHi, q.questionEn]);
+
+  // ── 6. Build repair context ───────────────────────────────────────────────
+  const ctx: RepairPromptContext = {
+    exam: test.exam,
+    category: test.category,
+    topic: test.topic,
+    difficulty: test.difficulty,
+    testTitleEn: test.titleEn,
+    question: targetQuestion,
+    validatorIssues: valIssues,
+    suggestedFix,
+    factualNotes,
+    existingQuestionTexts: existingTexts,
+    repairMode,
+    adminInstruction: adminInstruction ?? null,
+  };
+
+  // ── 7. Call OpenAI ────────────────────────────────────────────────────────
+  let rawAI: Record<string, unknown>;
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        messages: [
+          { role: 'system', content: buildRepairSystemPrompt() },
+          { role: 'user', content: buildRepairUserPrompt(ctx) },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.5, // lower temperature for factual repairs
+        max_tokens: 2000, // single question needs far less than full generation
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`OpenAI returned ${response.status}: ${errText.slice(0, 200)}`);
+    }
+
+    type OAResp = { choices: Array<{ message: { content: string } }> };
+    const data = await response.json() as OAResp;
+    const raw = data.choices?.[0]?.message?.content ?? '';
+    try {
+      rawAI = JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      throw new Error('OpenAI returned invalid JSON for repaired question.');
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'AI call failed';
+    return { ok: false, error: `Repair AI call failed: ${msg}`, stage: 'AI_CALL' };
+  }
+
+  // ── 8. Structural validation ───────────────────────────────────────────────
+  const structCheck = validateRepairedQuestion(rawAI, existingTexts);
+  if (!structCheck.valid) {
+    return {
+      ok: false,
+      error: `Repaired question failed structural validation: ${structCheck.errors.join('; ')}`,
+      stage: 'STRUCT_CHECK',
+    };
+  }
+
+  // Build the clean repaired question (server always enforces option E)
+  const repaired: RepairedQuestionData = {
+    questionHi: (rawAI.questionHi as string).trim(),
+    questionEn: (rawAI.questionEn as string).trim(),
+    optionAHi: (rawAI.optionAHi as string).trim(),
+    optionBHi: (rawAI.optionBHi as string).trim(),
+    optionCHi: (rawAI.optionCHi as string).trim(),
+    optionDHi: (rawAI.optionDHi as string).trim(),
+    optionAEn: (rawAI.optionAEn as string).trim(),
+    optionBEn: (rawAI.optionBEn as string).trim(),
+    optionCEn: (rawAI.optionCEn as string).trim(),
+    optionDEn: (rawAI.optionDEn as string).trim(),
+    explanationHi: (rawAI.explanationHi as string).trim(),
+    explanationEn: (rawAI.explanationEn as string).trim(),
+    correctOption: (rawAI.correctOption as string).trim().toUpperCase(),
+  };
+
+  // ── 9. Persist: audit log + question update + contentVersion ─────────────
+  try {
+    // 9a. Audit log — snapshot before and after
+    const previousSnapshot = {
+      id: targetQuestion.id,
+      order: targetQuestion.order,
+      category: targetQuestion.category,
+      topic: targetQuestion.topic,
+      difficulty: targetQuestion.difficulty,
+      questionHi: targetQuestion.questionHi,
+      questionEn: targetQuestion.questionEn,
+      optionAHi: targetQuestion.optionAHi,
+      optionBHi: targetQuestion.optionBHi,
+      optionCHi: targetQuestion.optionCHi,
+      optionDHi: targetQuestion.optionDHi,
+      optionEHi: targetQuestion.optionEHi,
+      optionAEn: targetQuestion.optionAEn,
+      optionBEn: targetQuestion.optionBEn,
+      optionCEn: targetQuestion.optionCEn,
+      optionDEn: targetQuestion.optionDEn,
+      optionEEn: targetQuestion.optionEEn,
+      explanationHi: targetQuestion.explanationHi,
+      explanationEn: targetQuestion.explanationEn,
+      correctOption: targetQuestion.correctOption,
+    };
+
+    const repairedSnapshot = {
+      ...previousSnapshot,
+      ...repaired,
+      optionEHi: OPTION_E_HI,
+      optionEEn: OPTION_E_EN,
+    };
+
+    const repairLog = await db.questionRepairLog.create({
+      data: {
+        testId,
+        questionId,
+        repairMode,
+        previousSnapshot,
+        repairedSnapshot,
+        validatorIssue: valIssues.map((i) => `[${i.type}] ${i.message}`).join('\n') || null,
+        suggestedFix,
+        adminInstruction: adminInstruction ?? null,
+        model: OPENAI_MODEL,
+      },
+    });
+
+    // 9b. Update the question in-place (same id, same order — only content changes)
+    await db.generatedQuestion.update({
+      where: { id: questionId },
+      data: {
+        questionHi: repaired.questionHi,
+        questionEn: repaired.questionEn,
+        optionAHi: repaired.optionAHi,
+        optionBHi: repaired.optionBHi,
+        optionCHi: repaired.optionCHi,
+        optionDHi: repaired.optionDHi,
+        optionEHi: OPTION_E_HI, // always server-enforced
+        optionAEn: repaired.optionAEn,
+        optionBEn: repaired.optionBEn,
+        optionCEn: repaired.optionCEn,
+        optionDEn: repaired.optionDEn,
+        optionEEn: OPTION_E_EN, // always server-enforced
+        explanationHi: repaired.explanationHi,
+        explanationEn: repaired.explanationEn,
+        correctOption: repaired.correctOption,
+      },
+    });
+
+    // 9c. Increment contentVersion + reset status to GENERATED
+    //     (old TestValidation is now stale — test must be revalidated before publishing)
+    await db.generatedTest.update({
+      where: { id: testId },
+      data: {
+        contentVersion: { increment: 1 },
+        status: 'GENERATED',
+      },
+    });
+
+    return {
+      ok: true,
+      questionId,
+      repairLogId: repairLog.id,
+      repairedQuestion: repaired,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'DB write failed';
+    return { ok: false, error: `Failed to save repaired question: ${msg}`, stage: 'DB_WRITE' };
+  }
+}

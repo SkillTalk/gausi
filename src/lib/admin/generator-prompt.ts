@@ -192,7 +192,11 @@ RULE: Verify assertion truth and reason truth independently. Then verify their e
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
-export function buildSystemPrompt(): string {
+export function buildSystemPrompt(mode: 'STRICT' | 'NORMAL' = 'STRICT'): string {
+  const scopeRule = mode === 'STRICT'
+    ? '18. TOPIC SCOPE — STRICT MODE: Every question MUST directly test the exact topic and scope specified. Do NOT generate adjacent-topic or broader-subject questions even if factually correct. If a strict topic scope and exclude list are provided, treat them as hard constraints — questions outside that boundary will be REJECTED.'
+    : '18. TOPIC SCOPE — NORMAL MODE: Questions should relate to the specified topic and category. Closely adjacent concepts are acceptable if clearly relevant.';
+
   return [
     'You are an expert BPSC (Bihar Public Service Commission) TRE 4 exam question generator.',
     'You generate high-quality bilingual MCQ practice papers in both Hindi and English.',
@@ -216,6 +220,8 @@ export function buildSystemPrompt(): string {
     '15. For CHRONOLOGY: use actual historical dates/years. All 4 orderings in options must be different.',
     '16. For ASSERTION_REASON: use the EXACT standard Hindi/English option texts specified in the format guide.',
     '17. AVOID having the same question structure back-to-back more than twice. Vary the sequence.',
+    scopeRule,
+    '19. TITLE INTEGRITY: Use the admin-provided topic name exactly in the "topic" field of every question. Do NOT rename, abbreviate or broaden the topic silently.',
   ].join('\n');
 }
 
@@ -227,6 +233,31 @@ export function buildUserPrompt(input: GenerateTestInput): string {
 
   const dist = computeDistribution(input.difficulty, input.totalQuestions);
   const distStr = formatDistribution(dist);
+  const mode = input.topicAdherenceMode ?? 'STRICT';
+
+  // Build scope block — only present if admin defined it
+  const scopeLines: string[] = [];
+  if (input.strictTopicScope || input.excludeScope) {
+    scopeLines.push('');
+    scopeLines.push('═══════════════════════════════════════════');
+    scopeLines.push(`TOPIC SCOPE BOUNDARY (mode: ${mode})`);
+    scopeLines.push('═══════════════════════════════════════════');
+    if (input.strictTopicScope) {
+      scopeLines.push('WHAT THIS TOPIC COVERS (questions must stay within this):');
+      scopeLines.push(input.strictTopicScope);
+    }
+    if (input.excludeScope) {
+      scopeLines.push('');
+      scopeLines.push('EXCLUDE / OUT OF SCOPE (do NOT generate questions on these):');
+      scopeLines.push(input.excludeScope);
+    }
+    if (mode === 'STRICT') {
+      scopeLines.push('');
+      scopeLines.push('⚠️  STRICT MODE: Every question must directly test the declared scope above.');
+      scopeLines.push('    A question that is factually correct but outside this boundary will FAIL validation.');
+      scopeLines.push('    Do not generate adjacent-topic or broader-subject questions.');
+    }
+  }
 
   const lines: string[] = [
     `Generate exactly ${input.totalQuestions} unique bilingual MCQ practice questions for the following BPSC TRE 4 test:`,
@@ -236,6 +267,7 @@ export function buildUserPrompt(input: GenerateTestInput): string {
     `Topic: ${input.topic}`,
     `Difficulty: ${input.difficulty}`,
     `Difficulty guidance: ${difficultyNote}`,
+    ...scopeLines,
     '',
     '═══════════════════════════════════════════',
     'REQUIRED QUESTION TYPE DISTRIBUTION',

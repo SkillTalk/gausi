@@ -9,7 +9,7 @@
 
 import { db } from '@/lib/db';
 import { runDeterministicValidation } from '@/lib/admin/deterministic-validator';
-import { runAIValidation, mergeValidationResults } from '@/lib/admin/ai-validator';
+import { runAIValidation, mergeValidationResults, type TopicScopeContext } from '@/lib/admin/ai-validator';
 import type { GeneratedQuestion } from '@/types/generated-test';
 import type { QuestionValidationInput, ValidationOverallStatus } from '@/types/validation';
 
@@ -48,6 +48,9 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
     status: string;
     totalQuestions: number;
     contentVersion: number;
+    strictTopicScope: string | null;
+    excludeScope: string | null;
+    topicAdherenceMode: string | null;
     questions: GeneratedQuestion[];
   };
 
@@ -103,6 +106,16 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
     cleanQuestionIds.has(q.id),
   ) as GeneratedQuestion[];
 
+  // Build scope context from test fields (null if no scope defined)
+  const scopeCtx: TopicScopeContext | null =
+    test.strictTopicScope || test.excludeScope
+      ? {
+          strictTopicScope: test.strictTopicScope,
+          excludeScope: test.excludeScope,
+          topicAdherenceMode: (test.topicAdherenceMode === 'NORMAL' ? 'NORMAL' : 'STRICT'),
+        }
+      : null;
+
   if (cleanQuestions.length > 0) {
     try {
       const aiRun = await runAIValidation(
@@ -112,6 +125,7 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
         test.category,
         test.topic,
         test.difficulty,
+        scopeCtx,
       );
       mergedResults = mergeValidationResults(detResults, aiRun.questionResults, cleanQuestionIds);
       aiModel = aiRun.model;

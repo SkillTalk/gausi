@@ -60,6 +60,9 @@ export async function generateTest(
         plannedPublishAt: input.plannedPublishAt ? new Date(input.plannedPublishAt) : null,
         generationSource: 'openai',
         generationModel: OPENAI_MODEL,
+        strictTopicScope: input.strictTopicScope ?? null,
+        excludeScope: input.excludeScope ?? null,
+        topicAdherenceMode: input.topicAdherenceMode ?? 'STRICT',
       },
     });
     testId = created.id;
@@ -83,7 +86,7 @@ export async function generateTest(
       body: JSON.stringify({
         model: OPENAI_MODEL,
         messages: [
-          { role: 'system', content: buildSystemPrompt() },
+          { role: 'system', content: buildSystemPrompt(input.topicAdherenceMode ?? 'STRICT') },
           { role: 'user', content: buildUserPrompt(input) },
         ],
         response_format: { type: 'json_object' },
@@ -156,6 +159,7 @@ export async function generateTest(
       where: { id: testId },
       data: {
         titleHi: aiResult.titleHi.trim(),
+        // Keep AI-generated English title but do NOT overwrite topic — topic = admin input, canonical
         titleEn: aiResult.titleEn.trim(),
         status: 'GENERATED',
         generationMs,

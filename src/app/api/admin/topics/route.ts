@@ -51,6 +51,9 @@ export async function POST(request: NextRequest) {
       cooldownDays: typeof b.cooldownDays === 'number' ? b.cooldownDays : 30,
       notes: typeof b.notes === 'string' ? b.notes : null,
       enabled: b.enabled !== false,
+      strictTopicScope: typeof b.strictTopicScope === 'string' ? b.strictTopicScope.trim() || null : null,
+      excludeScope: typeof b.excludeScope === 'string' ? b.excludeScope.trim() || null : null,
+      topicAdherenceMode: typeof b.topicAdherenceMode === 'string' && b.topicAdherenceMode === 'NORMAL' ? 'NORMAL' : 'STRICT',
     });
     return NextResponse.json({ topic: created }, { status: 201 });
   } catch (err) {

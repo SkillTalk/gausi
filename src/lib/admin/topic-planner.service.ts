@@ -138,6 +138,10 @@ export type CreateTopicInput = {
   cooldownDays?: number;
   notes?: string | null;
   enabled?: boolean;
+  /** Scope fields — carried to Agent 1 + Agent 2 during queue automation */
+  strictTopicScope?: string | null;
+  excludeScope?: string | null;
+  topicAdherenceMode?: string;
 };
 
 export async function createTopic(input: CreateTopicInput): Promise<ExamTopic> {
@@ -157,6 +161,9 @@ export async function createTopic(input: CreateTopicInput): Promise<ExamTopic> {
       notes: input.notes ?? null,
       enabled: input.enabled ?? true,
       status: 'ACTIVE',
+      strictTopicScope: input.strictTopicScope ?? null,
+      excludeScope: input.excludeScope ?? null,
+      topicAdherenceMode: input.topicAdherenceMode ?? 'STRICT',
     },
   });
 }
@@ -175,6 +182,9 @@ export type UpdateTopicInput = Partial<{
   sequenceOrder: number | null;
   earliestUseDate: Date | null;
   preferredDayOfWeek: number | null;
+  strictTopicScope: string | null;
+  excludeScope: string | null;
+  topicAdherenceMode: string;
 }>;
 
 export async function updateTopic(id: string, input: UpdateTopicInput): Promise<ExamTopic> {

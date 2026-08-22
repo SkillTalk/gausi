@@ -7,12 +7,17 @@ import type {
   ValidationResult,
   ValidationError,
   SupportedExam,
+  TopicAdherenceMode,
 } from '@/types/generated-test';
 import {
   SUPPORTED_EXAMS,
   EXAM_CATEGORIES,
   GENERATED_DIFFICULTIES,
+  TOPIC_ADHERENCE_MODES,
 } from '@/types/generated-test';
+
+const MAX_SCOPE_LENGTH = 2000;
+const MAX_EXCLUDE_LENGTH = 1000;
 
 const MIN_QUESTIONS = 5;
 const MAX_QUESTIONS = 50;
@@ -97,11 +102,46 @@ export function validateGenerateInput(input: unknown): ValidationResult {
     }
   }
 
+  // strictTopicScope (optional)
+  if (body.strictTopicScope !== undefined && body.strictTopicScope !== null) {
+    if (typeof body.strictTopicScope !== 'string') {
+      errors.push({ field: 'strictTopicScope', message: 'strictTopicScope must be a string.' });
+    } else if ((body.strictTopicScope as string).length > MAX_SCOPE_LENGTH) {
+      errors.push({ field: 'strictTopicScope', message: `strictTopicScope must be ${MAX_SCOPE_LENGTH} characters or fewer.` });
+    }
+  }
+
+  // excludeScope (optional)
+  if (body.excludeScope !== undefined && body.excludeScope !== null) {
+    if (typeof body.excludeScope !== 'string') {
+      errors.push({ field: 'excludeScope', message: 'excludeScope must be a string.' });
+    } else if ((body.excludeScope as string).length > MAX_EXCLUDE_LENGTH) {
+      errors.push({ field: 'excludeScope', message: `excludeScope must be ${MAX_EXCLUDE_LENGTH} characters or fewer.` });
+    }
+  }
+
+  // topicAdherenceMode (optional, defaults to STRICT)
+  if (body.topicAdherenceMode !== undefined && body.topicAdherenceMode !== null) {
+    if (!TOPIC_ADHERENCE_MODES.includes(body.topicAdherenceMode as TopicAdherenceMode)) {
+      errors.push({ field: 'topicAdherenceMode', message: `topicAdherenceMode must be one of: ${TOPIC_ADHERENCE_MODES.join(', ')}` });
+    }
+  }
+
   if (errors.length > 0) return { valid: false, errors };
   return { valid: true };
 }
 
 export function sanitizeInput(body: Record<string, unknown>): GenerateTestInput {
+  const scope = typeof body.strictTopicScope === 'string' && body.strictTopicScope.trim()
+    ? body.strictTopicScope.trim()
+    : undefined;
+  const exclude = typeof body.excludeScope === 'string' && body.excludeScope.trim()
+    ? body.excludeScope.trim()
+    : undefined;
+  const mode = TOPIC_ADHERENCE_MODES.includes(body.topicAdherenceMode as TopicAdherenceMode)
+    ? (body.topicAdherenceMode as TopicAdherenceMode)
+    : 'STRICT';
+
   return {
     exam: (body.exam as SupportedExam),
     category: (body.category as string).trim(),
@@ -110,5 +150,8 @@ export function sanitizeInput(body: Record<string, unknown>): GenerateTestInput 
     totalQuestions: body.totalQuestions as number,
     durationMinutes: body.durationMinutes as number,
     plannedPublishAt: body.plannedPublishAt as string | undefined,
+    strictTopicScope: scope,
+    excludeScope: exclude,
+    topicAdherenceMode: mode,
   };
 }

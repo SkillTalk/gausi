@@ -7,8 +7,9 @@ import {
   SUPPORTED_EXAMS,
   EXAM_CATEGORIES,
   GENERATED_DIFFICULTIES,
+  TOPIC_ADHERENCE_MODES,
 } from '@/types/generated-test';
-import type { GeneratedTest, GenerateTestInput, GeneratedDifficulty, SupportedExam } from '@/types/generated-test';
+import type { GeneratedTest, GenerateTestInput, GeneratedDifficulty, SupportedExam, TopicAdherenceMode } from '@/types/generated-test';
 
 const DEFAULT_FORM: GenerateTestInput = {
   exam: 'BPSC TRE 4',
@@ -18,6 +19,9 @@ const DEFAULT_FORM: GenerateTestInput = {
   totalQuestions: 25,
   durationMinutes: 15,
   plannedPublishAt: '',
+  strictTopicScope: '',
+  excludeScope: '',
+  topicAdherenceMode: 'STRICT',
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -195,6 +199,65 @@ export default function AdminTestsPage() {
                 maxLength={200}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
               />
+            </div>
+
+            {/* ── Scope Boundary (Aug 2026) ──────────────────────────── */}
+            {/* Topic Adherence Mode */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Topic Adherence Mode
+                <span className="ml-2 font-normal text-slate-400 text-xs">STRICT = out-of-scope questions will FAIL validation</span>
+              </label>
+              <div className="flex gap-3">
+                {TOPIC_ADHERENCE_MODES.map(mode => (
+                  <label key={mode} className={`flex items-center gap-2 cursor-pointer px-4 py-2 rounded-lg border text-sm font-semibold transition-colors ${form.topicAdherenceMode === mode ? 'bg-brand-50 border-brand-400 text-brand-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                    <input
+                      type="radio"
+                      name="topicAdherenceMode"
+                      value={mode}
+                      checked={form.topicAdherenceMode === mode}
+                      onChange={() => setField('topicAdherenceMode', mode as TopicAdherenceMode)}
+                      className="sr-only"
+                    />
+                    {mode}
+                    {mode === 'STRICT' && <span className="text-amber-600">⚠</span>}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Strict Topic Scope */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Strict Topic Scope
+                <span className="ml-2 font-normal text-slate-400 text-xs">What this topic covers — Agent 1 and Agent 2 will enforce this</span>
+              </label>
+              <textarea
+                value={form.strictTopicScope ?? ''}
+                onChange={e => setField('strictTopicScope', e.target.value)}
+                placeholder="e.g. Questions must test the Indian National Congress as an organisation between 1885 and 1948, including its foundation, sessions, presidents, resolutions..."
+                rows={3}
+                maxLength={2000}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+              <p className="text-xs text-slate-400 mt-1">{(form.strictTopicScope ?? '').length}/2000</p>
+            </div>
+
+            {/* Exclude Scope */}
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Exclude / Out of Scope
+                <span className="ml-2 font-normal text-slate-400 text-xs">Optional — what Agent 1 must NOT generate</span>
+              </label>
+              <textarea
+                value={form.excludeScope ?? ''}
+                onChange={e => setField('excludeScope', e.target.value)}
+                placeholder="e.g. Do not generate general Modern Indian History questions unless they directly test an INC decision, session, resolution or president."
+                rows={2}
+                maxLength={1000}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+              <p className="text-xs text-slate-400 mt-1">{(form.excludeScope ?? '').length}/1000</p>
             </div>
 
             {/* Difficulty */}

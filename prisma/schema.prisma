@@ -51,6 +51,13 @@ model GeneratedTest {
   publishedAt    DateTime?
   contentVersion Int       @default(1)
 
+  // ─── Strict Topic Scope (additive, Aug 2026) ────────────────────────────────
+  // Admin-defined boundary for Agent 1 generation and Agent 2 validation.
+  // null = no scope constraint (backward compatible with all existing tests).
+  strictTopicScope    String?  // What the topic must cover
+  excludeScope        String?  // What must be excluded
+  topicAdherenceMode  String   @default("STRICT") // "STRICT" | "NORMAL"
+
   questions  GeneratedQuestion[]
   validation TestValidation?
 
@@ -251,6 +258,12 @@ model ExamTopic {
   earliestUseDate  DateTime?               // do not select before this date
   preferredDayOfWeek Int?                  // 0=Sun…6=Sat, null=any
   notes            String?
+
+  // ─── Strict Topic Scope (additive, Aug 2026) ────────────────────────────────
+  // Carried automatically from ExamTopic to GeneratedTest during queue automation.
+  strictTopicScope    String?  // What questions must cover
+  excludeScope        String?  // What to exclude
+  topicAdherenceMode  String   @default("STRICT") // "STRICT" | "NORMAL"
 
   // State
   enabled Boolean @default(true)

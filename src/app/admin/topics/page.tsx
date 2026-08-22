@@ -22,6 +22,10 @@ type ExamTopic = {
   lastUsedAt: string | null;
   timesUsed: number;
   createdAt: string;
+  /** Scope boundary fields (additive Aug 2026) */
+  strictTopicScope: string | null;
+  excludeScope: string | null;
+  topicAdherenceMode: string;
 };
 
 type Stats = { activeCount: number; usedThisMonth: number; categoryCount: number };
@@ -79,6 +83,9 @@ function AddTopicForm({
     durationMinutesDefault: '',
     notes: '',
     enabled: true,
+    strictTopicScope: '',
+    excludeScope: '',
+    topicAdherenceMode: 'STRICT',
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +106,8 @@ function AddTopicForm({
           durationMinutesDefault: form.durationMinutesDefault ? parseInt(form.durationMinutesDefault) : null,
           difficultyDefault: form.difficultyDefault || null,
           notes: form.notes || null,
+          strictTopicScope: form.strictTopicScope.trim() || null,
+          excludeScope: form.excludeScope.trim() || null,
         }),
       });
       const data = await res.json() as { error?: string };
@@ -182,6 +191,49 @@ function AddTopicForm({
         <input value={form.notes} onChange={(e) => set('notes', e.target.value)}
           placeholder="Notes (optional)"
           className="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+      </div>
+
+      {/* ── Scope Boundary ─────────────────────────────────────────────── */}
+      <div className="border-t border-slate-100 pt-4 space-y-3">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Topic Scope Boundary</span>
+          <span className="text-xs text-slate-400">— Carried automatically to Agent 1 and Agent 2 during queue automation</span>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">
+            Topic Adherence Mode
+          </label>
+          <div className="flex gap-2">
+            {['STRICT', 'NORMAL'].map(mode => (
+              <label key={mode} className={`flex items-center gap-1.5 cursor-pointer px-3 py-1.5 rounded-lg border text-xs font-semibold transition-colors ${form.topicAdherenceMode === mode ? 'bg-brand-50 border-brand-400 text-brand-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <input type="radio" name="addTopicAdherenceMode" value={mode} checked={form.topicAdherenceMode === mode}
+                  onChange={() => set('topicAdherenceMode', mode)} className="sr-only" />
+                {mode} {mode === 'STRICT' && '⚠'}
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">
+            Strict Topic Scope <span className="font-normal text-slate-400">(optional — what must be covered)</span>
+          </label>
+          <textarea value={form.strictTopicScope} onChange={(e) => set('strictTopicScope', e.target.value)}
+            placeholder="e.g. Questions must test Indian Rivers: origins, tributaries, basins, river systems, drainage and major river projects."
+            rows={2} maxLength={2000}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs resize-none" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1">
+            Exclude / Out of Scope <span className="font-normal text-slate-400">(optional)</span>
+          </label>
+          <textarea value={form.excludeScope} onChange={(e) => set('excludeScope', e.target.value)}
+            placeholder="e.g. Do not ask general Indian geography questions unrelated to rivers."
+            rows={2} maxLength={1000}
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-xs resize-none" />
+        </div>
       </div>
 
       {error && <p className="text-red-600 text-xs bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
@@ -391,6 +443,14 @@ function TopicRow({ t, onAction }: {
       <td className="px-4 py-3">
         <p className="text-sm font-semibold text-slate-800">{t.topic}</p>
         {t.notes && <p className="text-xs text-slate-400 mt-0.5">{t.notes}</p>}
+        {t.strictTopicScope && (
+          <p className="text-xs text-blue-600 mt-0.5 line-clamp-1" title={t.strictTopicScope}>
+            🎯 {t.strictTopicScope.slice(0, 60)}{t.strictTopicScope.length > 60 ? '…' : ''}
+          </p>
+        )}
+        {!t.strictTopicScope && (
+          <p className="text-xs text-slate-300 mt-0.5">No scope defined</p>
+        )}
       </td>
       <td className="px-4 py-3 text-sm">
         <span className={priorityColor(t.priority)}>{priorityLabel(t.priority)}</span>

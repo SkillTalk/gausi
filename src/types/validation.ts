@@ -16,6 +16,12 @@ export type IssueType =
   | 'TRANSLATION_MISMATCH'
   | 'AMBIGUITY'
   | 'TOPIC_MISMATCH'
+  /**
+   * TOPIC_SCOPE_FAIL — Question is outside the admin-defined strictTopicScope.
+   * In STRICT mode this overrides an otherwise factually-correct PASS → FAIL.
+   * In NORMAL mode the question is flagged REVIEW instead.
+   */
+  | 'TOPIC_SCOPE_FAIL'
   | 'DIFFICULTY_MISMATCH'
   | 'NEAR_DUPLICATE'
   | 'OTHER';

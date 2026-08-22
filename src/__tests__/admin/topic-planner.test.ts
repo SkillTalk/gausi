@@ -70,6 +70,9 @@ function makeTopic(overrides: Partial<ExamTopic> = {}): ExamTopic {
     timesUsed: 0,
     createdAt: new Date('2026-08-01'),
     updatedAt: new Date('2026-08-01'),
+    strictTopicScope: null,
+    excludeScope: null,
+    topicAdherenceMode: 'STRICT',
     ...overrides,
   };
 }

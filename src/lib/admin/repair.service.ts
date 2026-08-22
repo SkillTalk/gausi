@@ -152,6 +152,9 @@ export async function repairQuestion(
     titleEn: string;
     status: string;
     contentVersion: number;
+    strictTopicScope: string | null;
+    excludeScope: string | null;
+    topicAdherenceMode: string | null;
     questions: Array<{
       id: string;
       order: number;
@@ -270,6 +273,9 @@ export async function repairQuestion(
     topic: test.topic,
     difficulty: test.difficulty,
     testTitleEn: test.titleEn,
+    strictTopicScope: test.strictTopicScope,
+    excludeScope: test.excludeScope,
+    topicAdherenceMode: (test.topicAdherenceMode === 'NORMAL' ? 'NORMAL' : 'STRICT'),
     question: {
       ...targetQuestion,
       questionType: targetQuestion.questionType ?? 'DIRECT',

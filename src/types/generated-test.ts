@@ -42,6 +42,18 @@ export const GENERATED_DIFFICULTIES: GeneratedDifficulty[] = [
 export const SUPPORTED_EXAMS = ['BPSC TRE 4'] as const;
 export type SupportedExam = typeof SUPPORTED_EXAMS[number];
 
+// ─── Topic Adherence Mode ─────────────────────────────────────────────────────
+/**
+ * Controls how strictly Agent 1 and Agent 2 enforce the admin-defined topic scope.
+ *
+ * STRICT — Default. A question that is factually correct but outside the defined
+ *          strictTopicScope is FAIL (issue: TOPIC_SCOPE_FAIL). Required for auto-publish.
+ * NORMAL — Soft check only. Out-of-scope questions are flagged REVIEW, not FAIL.
+ *          Allows broader topic coverage when admin explicitly relaxes the boundary.
+ */
+export type TopicAdherenceMode = 'STRICT' | 'NORMAL';
+export const TOPIC_ADHERENCE_MODES: TopicAdherenceMode[] = ['STRICT', 'NORMAL'];
+
 export const EXAM_CATEGORIES: Record<SupportedExam, string[]> = {
   'BPSC TRE 4': [
     'History',
@@ -79,6 +91,10 @@ export type GeneratedTest = {
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Admin-defined scope boundary. null = no constraint (backward compatible). */
+  strictTopicScope: string | null;
+  excludeScope: string | null;
+  topicAdherenceMode: TopicAdherenceMode;
 };
 
 export type GeneratedQuestion = {
@@ -151,6 +167,10 @@ export type GenerateTestInput = {
   totalQuestions: number;
   durationMinutes: number;
   plannedPublishAt?: string; // ISO string, optional
+  /** Optional strict scope boundary — sent to Agent 1 + Agent 2. */
+  strictTopicScope?: string;
+  excludeScope?: string;
+  topicAdherenceMode?: TopicAdherenceMode;
 };
 
 // ─── Validation result ────────────────────────────────────────────────────────

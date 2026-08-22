@@ -15,10 +15,51 @@ import type {
 const BATCH_SIZE = 20;
 const VALIDATION_MODEL = 'gpt-4o';
 
-function buildSystemPrompt(exam: string, category: string, topic: string, difficulty: string): string {
+// ─── Scope context passed from the test record ────────────────────────────────
+
+export type TopicScopeContext = {
+  /** Admin-defined scope boundary (null = no constraint). */
+  strictTopicScope: string | null;
+  excludeScope: string | null;
+  /** STRICT = out-of-scope → FAIL. NORMAL = out-of-scope → REVIEW only. */
+  topicAdherenceMode: 'STRICT' | 'NORMAL';
+};
+
+// ─── System prompt ────────────────────────────────────────────────────────────
+
+function buildSystemPrompt(
+  exam: string,
+  category: string,
+  topic: string,
+  difficulty: string,
+  scope: TopicScopeContext | null,
+): string {
+  const hasScopeConstraint = scope && (scope.strictTopicScope || scope.excludeScope);
+  const mode = scope?.topicAdherenceMode ?? 'STRICT';
+
+  const scopeSection = hasScopeConstraint
+    ? [
+        '',
+        '═══════════════════════════════════════════',
+        `TOPIC SCOPE BOUNDARY (mode: ${mode})`,
+        '═══════════════════════════════════════════',
+        ...(scope.strictTopicScope
+          ? ['WHAT THIS TOPIC COVERS:', scope.strictTopicScope]
+          : []),
+        ...(scope.excludeScope
+          ? ['', 'EXCLUDE / OUT OF SCOPE:', scope.excludeScope]
+          : []),
+        '',
+        mode === 'STRICT'
+          ? '⚠️  STRICT MODE: A question that is factually correct but tests content OUTSIDE the declared scope above must receive status=FAIL with issue type=TOPIC_SCOPE_FAIL. This is not a factual error — it is a scope violation.'
+          : 'NORMAL MODE: A question outside the declared scope should receive status=REVIEW with issue type=TOPIC_SCOPE_FAIL.',
+      ]
+    : [];
+
   return [
     `You are an expert educational content validator for ${exam} (teacher recruitment) exam question papers.`,
     `You are reviewing MCQ questions in category "${category}", topic "${topic}", difficulty "${difficulty}".`,
+    ...scopeSection,
     '',
     'Questions may use different formats. Validate each according to its questionType:',
     '',
@@ -28,6 +69,9 @@ function buildSystemPrompt(exam: string, category: string, topic: string, diffic
     '3. AMBIGUITY — Is there more than one plausible correct answer? Is the wording vague?',
     '4. NEAR-DUPLICATE — Is this question semantically very similar to another in this same batch?',
     '5. TOPIC ALIGNMENT — Does the question clearly belong to the specified category and topic?',
+    hasScopeConstraint
+      ? `5a. TOPIC SCOPE — Does the question stay within the declared scope boundary above? If not, issue type=TOPIC_SCOPE_FAIL.`
+      : '5a. TOPIC SCOPE — Is the question directly relevant to the specified topic?',
     '6. DIFFICULTY ALIGNMENT — Is the question appropriate for the specified difficulty level?',
     '',
     'TYPE-SPECIFIC CHECKS:',
@@ -64,16 +108,18 @@ function buildSystemPrompt(exam: string, category: string, topic: string, diffic
     '- A single incorrect pair in the supposedly correct option invalidates the question.',
     '',
     'STATUS RULES:',
-    '- PASS: factually correct, unambiguous, well-aligned, Hindi/English consistent, type-specific checks passed.',
-    '- FAIL: clear factual error with high confidence, obvious ambiguity (two equally valid answers), contradictory translations, or severely off-topic.',
-    '- REVIEW: factual uncertainty (cannot confidently verify), minor ambiguity, mild off-topic drift, near-duplicate, disputed quote attribution.',
-    '  Prefer REVIEW over FAIL when not fully certain.',
+    '- PASS: factually correct, unambiguous, well-aligned, Hindi/English consistent, type-specific checks passed, within topic scope.',
+    '- FAIL: clear factual error with high confidence, obvious ambiguity (two equally valid answers), contradictory translations, severely off-topic, or TOPIC_SCOPE_FAIL in STRICT mode.',
+    '- REVIEW: factual uncertainty (cannot confidently verify), minor ambiguity, mild off-topic drift, near-duplicate, disputed quote attribution, or TOPIC_SCOPE_FAIL in NORMAL mode.',
+    '  Prefer REVIEW over FAIL when not fully certain — EXCEPT for TOPIC_SCOPE_FAIL which must be FAIL in STRICT mode.',
     '',
     'IMPORTANT: Do NOT rewrite or alter questions. Only report issues. Do not invent problems that are not present.',
     '',
     'Return ONLY a valid JSON object matching the specified schema. No markdown, no explanations outside the JSON.',
   ].join('\n');
 }
+
+// ─── User prompt ──────────────────────────────────────────────────────────────
 
 function buildUserPrompt(
   questions: GeneratedQuestion[],
@@ -112,7 +158,7 @@ function buildUserPrompt(
       "confidence": <float 0.0-1.0>,
       "issues": [
         {
-          "type": "FACTUAL_ERROR | TRANSLATION_MISMATCH | AMBIGUITY | TOPIC_MISMATCH | DIFFICULTY_MISMATCH | NEAR_DUPLICATE | OTHER",
+          "type": "FACTUAL_ERROR | TRANSLATION_MISMATCH | AMBIGUITY | TOPIC_MISMATCH | TOPIC_SCOPE_FAIL | DIFFICULTY_MISMATCH | NEAR_DUPLICATE | OTHER",
           "message": "<specific description>",
           "severity": "ERROR | WARNING"
         }
@@ -128,8 +174,11 @@ function buildUserPrompt(
     '- overallStatus = READY only if ALL questions are PASS. Otherwise VALIDATION_FAILED.',
     '- For questions with no issues, use an empty array [] for issues.',
     '- Do not include partial objects.',
+    '- TOPIC_SCOPE_FAIL: use this issue type when a question is factually correct but outside the declared topic scope boundary.',
   ].join('\n');
 }
+
+// ─── Parse + validate AI output ───────────────────────────────────────────────
 
 function parseAIOutput(raw: string, expectedCount: number): AIValidationOutput {
   let parsed: unknown;
@@ -160,6 +209,8 @@ function parseAIOutput(raw: string, expectedCount: number): AIValidationOutput {
   return parsed as AIValidationOutput;
 }
 
+// ─── OpenAI HTTP call ─────────────────────────────────────────────────────────
+
 async function callOpenAI(apiKey: string, systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
@@ -189,6 +240,8 @@ async function callOpenAI(apiKey: string, systemPrompt: string, userPrompt: stri
   return data.choices?.[0]?.message?.content ?? '';
 }
 
+// ─── Single-batch validation ──────────────────────────────────────────────────
+
 async function validateBatch(
   apiKey: string,
   batch: GeneratedQuestion[],
@@ -196,13 +249,16 @@ async function validateBatch(
   category: string,
   topic: string,
   difficulty: string,
+  scope: TopicScopeContext | null,
 ): Promise<AIQuestionValidation[]> {
-  const systemPrompt = buildSystemPrompt(exam, category, topic, difficulty);
+  const systemPrompt = buildSystemPrompt(exam, category, topic, difficulty, scope);
   const userPrompt = buildUserPrompt(batch, exam, category, topic);
   const raw = await callOpenAI(apiKey, systemPrompt, userPrompt);
   const output = parseAIOutput(raw, batch.length);
   return output.questions;
 }
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 export type AIValidationRunResult = {
   questionResults: Map<number, AIQuestionValidation>; // keyed by question order
@@ -218,7 +274,10 @@ export async function runAIValidation(
   category: string,
   topic: string,
   difficulty: string,
+  scope?: TopicScopeContext | null,
 ): Promise<AIValidationRunResult> {
+  const scopeCtx = scope ?? null;
+
   // Split into batches
   const batches: GeneratedQuestion[][] = [];
   for (let i = 0; i < questions.length; i += BATCH_SIZE) {
@@ -227,7 +286,7 @@ export async function runAIValidation(
 
   const allResults: AIQuestionValidation[] = [];
   for (const batch of batches) {
-    const batchResults = await validateBatch(apiKey, batch, exam, category, topic, difficulty);
+    const batchResults = await validateBatch(apiKey, batch, exam, category, topic, difficulty, scopeCtx);
     allResults.push(...batchResults);
   }
 

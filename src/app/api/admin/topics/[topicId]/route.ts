@@ -31,6 +31,7 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
     'topic', 'category', 'difficultyDefault', 'questionCountDefault',
     'durationMinutesDefault', 'priority', 'cooldownDays', 'notes',
     'enabled', 'status', 'sequenceOrder', 'earliestUseDate', 'preferredDayOfWeek',
+    'strictTopicScope', 'excludeScope', 'topicAdherenceMode',
   ];
   const data: Record<string, unknown> = {};
   for (const key of allowed) {

@@ -173,6 +173,10 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
   let selectedTopicId: string | null = null;
   const topicSelectionSource = topicMode === 'QUEUE' ? 'QUEUE' : 'MANUAL';
 
+  let resolvedStrictTopicScope: string | null = null;
+  let resolvedExcludeScope: string | null = null;
+  let resolvedTopicAdherenceMode: 'STRICT' | 'NORMAL' = 'STRICT';
+
   if (topicMode === 'QUEUE') {
     const nextTopic = await getNextEligibleTopic({
       exam: config.exam,
@@ -190,11 +194,53 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
     resolvedQuestions = nextTopic.questionCountDefault ?? config.totalQuestions;
     resolvedDuration = nextTopic.durationMinutesDefault ?? config.durationMinutes;
     selectedTopicId = nextTopic.id;
+    // Carry scope from the queue topic record
+    resolvedStrictTopicScope = (nextTopic as Record<string, unknown>).strictTopicScope as string | null ?? null;
+    resolvedExcludeScope = (nextTopic as Record<string, unknown>).excludeScope as string | null ?? null;
+    const topicMode_ = (nextTopic as Record<string, unknown>).topicAdherenceMode as string | null;
+    resolvedTopicAdherenceMode = topicMode_ === 'NORMAL' ? 'NORMAL' : 'STRICT';
   } else {
     // MANUAL mode — topic must be set
     if (!config.topic.trim()) {
       return { status: 'SKIPPED', message: 'No topic configured. Set the topic for the next daily test.' };
     }
+  }
+
+  // Auto-publish safety: QUEUE + STRICT + autoPublish ON + no scope → SKIPPED
+  if (
+    topicMode === 'QUEUE' &&
+    config.autoPublish &&
+    resolvedTopicAdherenceMode === 'STRICT' &&
+    !resolvedStrictTopicScope
+  ) {
+    console.warn(`[AUTOMATION] STRICT mode + autoPublish + no scope defined for topic "${resolvedTopic}". Holding for safety.`);
+    const run = await db.automationRun.create({
+      data: {
+        configId: config.id,
+        runKey: buildRunKey(config.exam, resolvedCategory, options.overrideDateStr ?? getISTDateString()),
+        scheduledFor: istMidnightUTC(options.overrideDateStr ?? getISTDateString()),
+        startedAt: new Date(),
+        finishedAt: new Date(),
+        status: 'SKIPPED',
+        errorStage: 'SCOPE_CHECK',
+        errorMessage: `MISSING_TOPIC_SCOPE: Topic "${resolvedTopic}" has no strictTopicScope but topicAdherenceMode is STRICT and autoPublish is ON. Add a scope boundary to the topic before auto-publishing.`,
+        topic: resolvedTopic,
+        category: resolvedCategory,
+        exam: config.exam,
+        totalQuestions: resolvedQuestions,
+        topicSelectionSource,
+        selectedTopicId,
+      },
+    });
+    await db.dailyAutomationConfig.update({
+      where: { id: config.id },
+      data: { lastRunAt: new Date(), lastRunStatus: 'SKIPPED' },
+    });
+    return {
+      status: 'SKIPPED',
+      runId: run.id,
+      message: `MISSING_TOPIC_SCOPE: Topic "${resolvedTopic}" has no strict scope. Add scope in /admin/topics to enable STRICT auto-publish.`,
+    };
   }
 
   // 4. Idempotency check
@@ -278,6 +324,9 @@ export async function runAutomation(options: RunOptions = {}): Promise<Automatio
     difficulty: resolvedDifficulty as GenerateTestInput['difficulty'],
     totalQuestions: resolvedQuestions,
     durationMinutes: resolvedDuration,
+    strictTopicScope: resolvedStrictTopicScope ?? undefined,
+    excludeScope: resolvedExcludeScope ?? undefined,
+    topicAdherenceMode: resolvedTopicAdherenceMode,
   };
 
   // Validate input shape (reuse Agent 1 validator)

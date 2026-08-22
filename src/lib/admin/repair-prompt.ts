@@ -26,6 +26,11 @@ export type RepairPromptContext = {
   difficulty: string;
   testTitleEn: string;
 
+  /** Optional strict scope boundary — if present, repaired/replaced question must stay within it. */
+  strictTopicScope?: string | null;
+  excludeScope?: string | null;
+  topicAdherenceMode?: 'STRICT' | 'NORMAL';
+
   /** The question being repaired. */
   question: {
     questionType: string;
@@ -105,6 +110,23 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
   lines.push(`Difficulty: ${ctx.difficulty}`);
   lines.push(`Test Title: ${ctx.testTitleEn}`);
   lines.push('');
+
+  // Include scope context so the replacement question stays within boundaries
+  if (ctx.strictTopicScope || ctx.excludeScope) {
+    const mode = ctx.topicAdherenceMode ?? 'STRICT';
+    lines.push('─── Topic Scope Boundary ───');
+    if (ctx.strictTopicScope) {
+      lines.push(`Scope (what must be covered): ${ctx.strictTopicScope}`);
+    }
+    if (ctx.excludeScope) {
+      lines.push(`Exclude (out of scope): ${ctx.excludeScope}`);
+    }
+    lines.push(`Mode: ${mode}`);
+    if (mode === 'STRICT') {
+      lines.push('⚠️  STRICT: The repaired/replacement question MUST stay within the scope boundary above. A question outside this boundary will fail re-validation regardless of factual accuracy.');
+    }
+    lines.push('');
+  }
 
   if (ctx.repairMode === 'AUTO_FIX') {
     lines.push('─── Original Question to Fix ───');

@@ -105,6 +105,10 @@ model QuestionValidationResult {
   suggestedFix String?
   factualNotes String?
 
+  // Snapshot of GeneratedQuestion.questionVersion at validation time.
+  // A result is CURRENT iff this matches the question's current questionVersion.
+  questionVersion Int @default(1)
+
   @@index([validationId])
   @@index([questionId])
 }
@@ -144,6 +148,15 @@ model GeneratedQuestion {
   // Existing questions default to DIRECT (purely additive — no data loss).
   questionType  String   @default("DIRECT")
   // "DIRECT" | "STATEMENT" | "QUOTE_ATTRIBUTION" | "CHRONOLOGY" | "MATCHING" | "ASSERTION_REASON"
+
+  // ─── Per-question versioning (added Aug 2026) ──────────────────────────────
+  // Incremented whenever this question's content changes (repair, answer override).
+  // Used for incremental revalidation: a QuestionValidationResult is current only
+  // when its questionVersion matches this field.
+  questionVersion Int    @default(1)
+
+  // Who set the correct answer: AI generation or admin manual override.
+  answerSource    String @default("AI_VALIDATED") // "AI_VALIDATED" | "ADMIN_VERIFIED"
 
   createdAt DateTime @default(now())
 
@@ -296,6 +309,22 @@ model QuestionRepairLog {
   adminInstruction  String?  // optional note provided by the admin
   model             String?  // e.g. "gpt-4o"
   createdAt         DateTime @default(now())
+
+  @@index([testId])
+  @@index([questionId])
+}
+
+// ─── QuestionAnswerOverride ───────────────────────────────────────────────────
+// Audit trail for admin manual correct-answer overrides.
+// Captures the previous and new correctOption so no change is silently lost.
+model QuestionAnswerOverride {
+  id                   String   @id @default(cuid())
+  testId               String
+  questionId           String
+  previousCorrectOption String  // "A" | "B" | "C" | "D"
+  newCorrectOption      String  // "A" | "B" | "C" | "D"
+  adminNote            String?  // optional reason or source citation
+  createdAt            DateTime @default(now())
 
   @@index([testId])
   @@index([questionId])

@@ -293,6 +293,175 @@ function RepairModal({
   );
 }
 
+// ─── Answer Override Modal ────────────────────────────────────────────────────
+
+type AnswerOverrideModalProps = {
+  testId: string;
+  question: GeneratedQuestion;
+  onClose: () => void;
+  onOverridden: (newCorrectOption: string, explanationWarning: boolean) => void;
+};
+
+function AnswerOverrideModal({ testId, question, onClose, onOverridden }: AnswerOverrideModalProps) {
+  const [selected, setSelected] = useState<string>(question.correctOption);
+  const [adminNote, setAdminNote] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const OPTIONS = ['A', 'B', 'C', 'D'] as const;
+  type OptionLetter = (typeof OPTIONS)[number];
+
+  const optionTextHi: Record<OptionLetter, string> = {
+    A: question.optionAHi, B: question.optionBHi,
+    C: question.optionCHi, D: question.optionDHi,
+  };
+  const optionTextEn: Record<OptionLetter, string> = {
+    A: question.optionAEn, B: question.optionBEn,
+    C: question.optionCEn, D: question.optionDEn,
+  };
+
+  async function handleSave() {
+    if (!confirmed) {
+      setConfirmed(true);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/tests/${testId}/questions/${question.id}/override-answer`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ correctOption: selected, adminNote: adminNote.trim() || undefined }),
+        },
+      );
+      const data = await res.json() as { error?: string; explanationWarning?: boolean };
+      if (!res.ok) {
+        setError(data.error ?? 'Override failed. Please try again.');
+        setConfirmed(false);
+        return;
+      }
+      onOverridden(selected, data.explanationWarning ?? false);
+    } catch {
+      setError('Network error. Please try again.');
+      setConfirmed(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
+        <div className="flex items-start justify-between">
+          <h2 className="text-base font-extrabold text-slate-900">Edit Correct Answer</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+        </div>
+
+        {/* Question text */}
+        <div className="bg-slate-50 rounded-xl p-4 space-y-1">
+          <p className="text-sm font-semibold text-slate-800 whitespace-pre-wrap">{question.questionHi}</p>
+          <p className="text-xs text-slate-500 whitespace-pre-wrap">{question.questionEn}</p>
+        </div>
+
+        {/* Option selector */}
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Select Correct Answer</p>
+          {OPTIONS.map((letter) => (
+            <button
+              key={letter}
+              onClick={() => { setSelected(letter); setConfirmed(false); }}
+              className={`w-full flex items-start gap-3 p-3 rounded-xl border text-left transition-colors ${
+                selected === letter
+                  ? 'border-brand-500 bg-brand-50'
+                  : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <span className={`shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold border ${
+                selected === letter
+                  ? 'bg-brand-600 text-white border-brand-600'
+                  : 'border-slate-300 text-slate-500'
+              }`}>
+                {letter}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-slate-800">{optionTextHi[letter]}</div>
+                <div className="text-xs text-slate-500 mt-0.5">{optionTextEn[letter]}</div>
+              </div>
+              {question.correctOption === letter && selected !== letter && (
+                <span className="text-xs text-slate-400 shrink-0">(was correct)</span>
+              )}
+              {selected === letter && (
+                <span className="text-xs font-bold text-brand-700 shrink-0">✓ Selected</span>
+              )}
+            </button>
+          ))}
+          <p className="text-xs text-slate-400">Option E cannot be selected as the correct answer.</p>
+        </div>
+
+        {/* Optional admin note */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-600 mb-1">
+            Reason / Note (optional)
+          </label>
+          <textarea
+            value={adminNote}
+            onChange={(e) => setAdminNote(e.target.value)}
+            rows={2}
+            maxLength={500}
+            placeholder="e.g. Official NCERT source confirms option C."
+            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
+          />
+        </div>
+
+        {/* Confirmation warning */}
+        {confirmed && (
+          <div className="bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 text-sm text-amber-800">
+            <p className="font-bold mb-1">⚠ Confirm Answer Override</p>
+            <p>
+              You are setting the correct answer to <strong>Option {selected}</strong>.
+              The selected answer will be treated as authoritative — it will be used for all
+              student scoring and will not be re-validated by AI.
+            </p>
+            <p className="mt-1 text-xs">Click <strong>Save Admin Answer</strong> again to confirm.</p>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            ❌ {error}
+          </div>
+        )}
+
+        {/* Actions */}
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={() => { void handleSave(); }}
+            disabled={saving || selected === question.correctOption}
+            className="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-50 transition-colors"
+          >
+            {saving ? 'Saving…' : confirmed ? '🛡 Confirm — Save Admin Answer' : '🛡 Save Admin Answer'}
+          </button>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2.5 border border-slate-300 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Option row ───────────────────────────────────────────────────────────────
 
 function OptionRow({ letter, hi, en, isCorrect }: { letter: string; hi: string; en: string; isCorrect: boolean }) {
@@ -320,17 +489,19 @@ function QuestionCard({
   qVal,
   needsRevalidation,
   onRepair,
+  onOverrideAnswer,
   isPublished,
 }: {
   q: GeneratedQuestion;
   index: number;
   qVal?: StoredQuestionValidation;
   /**
-   * True when this question was repaired after the current TestValidation snapshot.
+   * True when this question's questionVersion differs from QVR.questionVersion.
    * When true, show "Needs Revalidation" badge and suppress stale issue details.
    */
   needsRevalidation: boolean;
   onRepair?: (q: GeneratedQuestion, qv: StoredQuestionValidation) => void;
+  onOverrideAnswer?: (q: GeneratedQuestion) => void;
   isPublished: boolean;
 }) {
   const [showDetails, setShowDetails] = useState(false);
@@ -368,6 +539,12 @@ function QuestionCard({
             ? <QuestionValidationBadge status={qVal.status} />
             : null
           }
+          {/* Admin Answer badge — shown when admin manually overrode the correct option */}
+          {(q as GeneratedQuestion & { answerSource?: string }).answerSource === 'ADMIN_VERIFIED' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold bg-violet-50 text-violet-700 border-violet-200">
+              🛡 Admin Answer
+            </span>
+          )}
           <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{q.category}</span>
           <span className="text-xs text-slate-400">{q.difficulty}</span>
         </div>
@@ -387,6 +564,15 @@ function QuestionCard({
         <p className="text-xs font-semibold text-slate-500 mb-0.5">Explanation</p>
         <p className="text-sm text-slate-700">{q.explanationHi}</p>
         <p className="text-xs text-slate-500 mt-0.5">{q.explanationEn}</p>
+        {/* Edit Correct Answer for PASS questions (always shown for non-published) */}
+        {!isPublished && qVal?.status === 'PASS' && !needsRevalidation && onOverrideAnswer && (
+          <button
+            onClick={() => onOverrideAnswer(q)}
+            className="mt-2 text-xs font-semibold px-3 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 transition-colors"
+          >
+            🛡 Edit Correct Answer
+          </button>
+        )}
       </div>
 
       {/* Validation details — for FAIL/REVIEW/repairable issues AND only when the result is fresh */}
@@ -437,6 +623,15 @@ function QuestionCard({
                     🔧 Fix / Regenerate Question
                   </button>
                 )}
+                {/* Edit Correct Answer — available for non-published questions regardless of validation */}
+                {!isPublished && onOverrideAnswer && (
+                  <button
+                    onClick={() => onOverrideAnswer(q)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-violet-500 hover:bg-violet-600 text-white transition-colors"
+                  >
+                    🛡 Edit Correct Answer
+                  </button>
+                )}
               </div>
 
               {showDetails && qVal && (
@@ -473,10 +668,10 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
   const {
     passed, failed, reviewNeeded, totalQuestions, overallStatus,
     validationSummary, validatorModel, validationMs, validatedAt,
-    isStale, repairedQuestionIds,
+    isStale, staleQuestionIds, questionsValidated,
   } = validation;
 
-  const repairedCount = repairedQuestionIds?.length ?? 0;
+  const staleCount = staleQuestionIds?.length ?? 0;
 
   return (
     <div className={`rounded-xl border p-5 space-y-3 ${
@@ -489,8 +684,8 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
           <span className="text-amber-600 shrink-0">⚠</span>
           <div className="text-xs text-amber-800">
             <span className="font-bold">Validation is from a previous version.</span>
-            {repairedCount > 0
-              ? ` ${repairedCount} question${repairedCount > 1 ? 's were' : ' was'} repaired since this snapshot. Repaired question${repairedCount > 1 ? 's show' : ' shows'} "Needs Revalidation" below.`
+            {staleCount > 0
+              ? ` ${staleCount} question${staleCount > 1 ? 's are' : ' is'} stale and need${staleCount === 1 ? 's' : ''} revalidation. Click Revalidate to run AI on changed questions only.`
               : ' Revalidate to refresh results.'}
           </div>
         </div>
@@ -533,7 +728,13 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
         {validationMs && <span>Duration: {(validationMs / 1000).toFixed(1)}s</span>}
         <span>Validated: {new Date(validatedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</span>
         <span>Total: {totalQuestions}Q</span>
+        {questionsValidated !== undefined && (
+          <span className="text-purple-500 font-medium">
+            AI: {questionsValidated}/{totalQuestions} questions
+          </span>
+        )}
         {isStale && <span className="text-amber-500 font-medium">(snapshot — stale)</span>}
+        {!isStale && staleCount === 0 && <span className="text-green-600 font-medium">✓ All current</span>}
       </div>
     </div>
   );
@@ -566,6 +767,10 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   const [repairTarget, setRepairTarget] = useState<RepairTarget | null>(null);
   const [repairBanner, setRepairBanner] = useState<string | null>(null);
 
+  // ── Answer Override state ────────────────────────────────────────────────────
+  const [overrideTarget, setOverrideTarget] = useState<GeneratedQuestion | null>(null);
+  const [overrideBanner, setOverrideBanner] = useState<string | null>(null);
+
   // Build a lookup map: questionId → validation result
   const valByQuestionId = new Map<string, StoredQuestionValidation>();
   if (validation) {
@@ -574,8 +779,11 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     }
   }
 
-  // Build a set of repaired questionIds (empty when validation is fresh)
-  const repairedSet = new Set<string>(validation?.repairedQuestionIds ?? []);
+  // Stale question IDs — use per-question version comparison (primary)
+  // falling back to legacy repair log signal for older validations.
+  const staleSet = new Set<string>(
+    validation?.staleQuestionIds ?? validation?.repairedQuestionIds ?? [],
+  );
 
   const reloadTest = useCallback(() => {
     return fetch(`/api/admin/tests/${testId}`)
@@ -754,7 +962,16 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   async function handleRepairSuccess() {
     setRepairTarget(null);
     setRepairBanner('Question repaired. Revalidation required before publishing.');
-    // Reload both test (to show updated question) and validation (now stale)
+    await Promise.all([reloadTest(), reloadValidation()]);
+  }
+
+  async function handleOverrideSuccess(newCorrectOption: string, explanationWarning: boolean) {
+    setOverrideTarget(null);
+    const baseMsg = `Correct answer changed to Option ${newCorrectOption}. Admin override recorded.`;
+    const warnMsg = explanationWarning
+      ? ' ⚠ The explanation may reference the old answer — review it before publishing.'
+      : '';
+    setOverrideBanner(baseMsg + warnMsg);
     await Promise.all([reloadTest(), reloadValidation()]);
   }
 
@@ -775,6 +992,8 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     : 'Not set';
 
   const canValidate = ['GENERATED', 'VALIDATION_FAILED', 'READY'].includes(test.status);
+  const staleCount = validation?.staleQuestionIds?.length ?? 0;
+  const allCurrent = validation !== null && staleCount === 0;
   const canPublishNow = ['READY', 'SCHEDULED'].includes(test.status);
   const canSchedule = test.status === 'READY';
   const canCancelSchedule = test.status === 'SCHEDULED';
@@ -817,20 +1036,25 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
             {canValidate && (
               <button
                 onClick={() => { void handleValidate(); }}
-                disabled={isOperationInProgress}
+                disabled={isOperationInProgress || allCurrent}
+                title={allCurrent ? 'All questions have current validation results — no AI call needed' : undefined}
                 className={`text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
-                  validation
+                  allCurrent
+                    ? 'bg-green-100 text-green-700 border border-green-300 cursor-default'
+                    : validation
                     ? 'bg-purple-600 hover:bg-purple-700 text-white'
                     : 'bg-brand-600 hover:bg-brand-700 text-white'
                 }`}
               >
-                {validating
+                {validating || test.status === 'VALIDATING'
                   ? 'Validating...'
-                  : test.status === 'VALIDATING'
-                  ? 'Validating...'
-                  : validation
-                  ? '↺ Revalidate'
-                  : '✓ Validate Test'}
+                  : allCurrent
+                  ? '✓ All Questions Current'
+                  : !validation
+                  ? '✓ Validate Test'
+                  : staleCount > 0
+                  ? `↺ Revalidate ${staleCount} Question${staleCount > 1 ? 's' : ''}`
+                  : '↺ Revalidate'}
               </button>
             )}
 
@@ -930,6 +1154,22 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
           <button
             onClick={() => setRepairBanner(null)}
             className="text-amber-400 hover:text-amber-700 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* ── Post-override banner ─────────────────────────────────────────── */}
+      {overrideBanner && (
+        <div className="bg-violet-50 border border-violet-300 rounded-xl p-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-violet-600 text-lg">🛡</span>
+            <p className="text-sm font-semibold text-violet-800">{overrideBanner}</p>
+          </div>
+          <button
+            onClick={() => setOverrideBanner(null)}
+            className="text-violet-400 hover:text-violet-700 text-sm"
           >
             ✕
           </button>
@@ -1065,9 +1305,10 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               q={q}
               index={i}
               qVal={valByQuestionId.get(q.id)}
-              needsRevalidation={repairedSet.has(q.id)}
+              needsRevalidation={staleSet.has(q.id)}
               isPublished={isPublished}
               onRepair={(question, qv) => setRepairTarget({ question, qVal: qv })}
+              onOverrideAnswer={(question) => setOverrideTarget(question)}
             />
           ))}
         </div>
@@ -1084,6 +1325,16 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
           topicAdherenceMode={(test as GeneratedTestWithQuestions & { topicAdherenceMode?: string | null }).topicAdherenceMode}
           onClose={() => setRepairTarget(null)}
           onRepaired={() => { void handleRepairSuccess(); }}
+        />
+      )}
+
+      {/* ── Answer Override Modal ─────────────────────────────────────────── */}
+      {overrideTarget && (
+        <AnswerOverrideModal
+          testId={testId}
+          question={overrideTarget}
+          onClose={() => setOverrideTarget(null)}
+          onOverridden={(newOpt, warnExp) => { void handleOverrideSuccess(newOpt, warnExp); }}
         />
       )}
     </div>

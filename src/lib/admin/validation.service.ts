@@ -1,8 +1,17 @@
 /**
  * Validation Service — Agent 2 core logic extracted for reuse by Agent 4.
  *
- * The validate route delegates to this module.
- * The automation service calls this directly (no HTTP round-trip).
+ * ## Incremental validation (Aug 2026)
+ *
+ * Each GeneratedQuestion now has a `questionVersion` counter (starts at 1,
+ * incremented on repair or admin answer override). Each QuestionValidationResult
+ * also stores the `questionVersion` at which it was produced.
+ *
+ * A result is CURRENT when QVR.questionVersion === GeneratedQuestion.questionVersion.
+ *
+ * When admin clicks "Revalidate", only STALE questions (version mismatch or missing
+ * QVR) are sent to the AI.  Unchanged questions keep their existing current results.
+ * This avoids re-sending 24 unchanged questions when only 1 was repaired.
  *
  * Server-only. Never import in client components.
  */
@@ -10,6 +19,7 @@
 import { db } from '@/lib/db';
 import { runDeterministicValidation } from '@/lib/admin/deterministic-validator';
 import { runAIValidation, mergeValidationResults, type TopicScopeContext } from '@/lib/admin/ai-validator';
+import { computeStaleQuestions } from '@/lib/admin/validation-freshness';
 import type { GeneratedQuestion } from '@/types/generated-test';
 import type { QuestionValidationInput, ValidationOverallStatus } from '@/types/validation';
 
@@ -23,6 +33,10 @@ export type ValidationSuccess = {
   reviewNeeded: number;
   validationMs: number;
   validationSummary: string;
+  /** How many questions were actually sent to AI (≤ totalQuestions). */
+  questionsValidated: number;
+  /** IDs of questions that were stale and re-validated. */
+  staleQuestionIds: string[];
 };
 
 export type ValidationError = {
@@ -35,10 +49,31 @@ export type ValidationResult = ValidationSuccess | ValidationError;
 
 const VALIDATABLE_STATUSES = new Set(['GENERATED', 'VALIDATION_FAILED', 'READY']);
 
+// ─── Shared types ─────────────────────────────────────────────────────────────
+
+type QVRRow = {
+  id: string;
+  questionId: string;
+  order: number;
+  status: string;
+  confidence: number;
+  issues: unknown;
+  suggestedFix: string | null;
+  factualNotes: string | null;
+  questionVersion: number;
+};
+
+type ExistingTV = {
+  id: string;
+  contentVersion: number;
+  validatorModel: string | null;
+  questionResults: QVRRow[];
+} | null;
+
 // ─── Core validation function ─────────────────────────────────────────────────
 
 export async function validateTest(testId: string, apiKey: string): Promise<ValidationResult> {
-  // 1. Load test + questions
+  // 1. Load test + questions (including questionVersion for per-question freshness)
   type TestRow = {
     id: string;
     exam: string;
@@ -51,7 +86,7 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
     strictTopicScope: string | null;
     excludeScope: string | null;
     topicAdherenceMode: string | null;
-    questions: GeneratedQuestion[];
+    questions: Array<GeneratedQuestion & { questionVersion: number }>;
   };
 
   let test: TestRow | null;
@@ -82,7 +117,49 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
     return { ok: false, error: 'Test has no questions.', stage: 'LOAD' };
   }
 
-  // 2. Mark as VALIDATING
+  // 2. Load existing TestValidation + QVRs (with questionVersion)
+  let existingTV: ExistingTV = null;
+
+  try {
+    const row = await db.testValidation.findUnique({
+      where: { testId },
+      select: {
+        id: true,
+        contentVersion: true,
+        validatorModel: true,
+        questionResults: {
+          select: {
+            id: true,
+            questionId: true,
+            order: true,
+            status: true,
+            confidence: true,
+            issues: true,
+            suggestedFix: true,
+            factualNotes: true,
+            questionVersion: true,
+          },
+          orderBy: { order: 'asc' },
+        },
+      },
+    });
+    existingTV = row as unknown as ExistingTV;
+  } catch {
+    // If we can't load existing validation, treat all questions as stale
+  }
+
+  // 3. Identify STALE questions via per-question version comparison
+  const existingQVRs: Array<{ questionId: string; questionVersion: number }> =
+    existingTV?.questionResults ?? [];
+
+  const staleQuestionIds = computeStaleQuestions(
+    test.questions.map((q) => ({ id: q.id, questionVersion: q.questionVersion })),
+    existingQVRs,
+  );
+
+  const hasStaleQuestions = staleQuestionIds.length > 0;
+
+  // 4. Mark as VALIDATING
   try {
     await db.generatedTest.update({ where: { id: testId }, data: { status: 'VALIDATING' } });
   } catch (err) {
@@ -92,21 +169,15 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
 
   const startMs = Date.now();
 
-  // 3. Deterministic checks
+  // 5. Deterministic checks on ALL questions (cheap, no AI cost)
   const { results: detResults, cleanQuestionIds } = runDeterministicValidation(
     test.questions as GeneratedQuestion[],
   );
 
-  // 4. AI checks
-  let mergedResults: QuestionValidationInput[] = detResults;
-  let aiModel: string | null = null;
-  let aiSummary = '';
+  // For deterministic failures, they become stale too (always send to update QVR)
+  const detFailedIds = new Set(detResults.filter((r) => r.status === 'FAIL').map((r) => r.questionId));
 
-  const cleanQuestions = test.questions.filter((q: GeneratedQuestion) =>
-    cleanQuestionIds.has(q.id),
-  ) as GeneratedQuestion[];
-
-  // Build scope context from test fields (null if no scope defined)
+  // 6. Build scope context
   const scopeCtx: TopicScopeContext | null =
     test.strictTopicScope || test.excludeScope
       ? {
@@ -116,38 +187,123 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
         }
       : null;
 
-  if (cleanQuestions.length > 0) {
+  // 7. Run AI on STALE + deterministic-failed questions only
+  //    Questions that are current (version match, previous PASS/FAIL/REVIEW) are skipped.
+  const aiCandidateIds = new Set([...staleQuestionIds, ...detFailedIds]);
+  const aiCandidates = (test.questions as GeneratedQuestion[]).filter(
+    (q) => aiCandidateIds.has(q.id) && cleanQuestionIds.has(q.id),
+  );
+
+  let newValidationResults: QuestionValidationInput[] = [];
+  let aiModel: string | null = existingTV?.validatorModel ?? null;
+  let aiSummary = '';
+  const questionsValidated = aiCandidates.length;
+
+  if (aiCandidates.length > 0) {
     try {
       const aiRun = await runAIValidation(
         apiKey,
-        cleanQuestions,
+        aiCandidates,
         test.exam,
         test.category,
         test.topic,
         test.difficulty,
         scopeCtx,
       );
-      mergedResults = mergeValidationResults(detResults, aiRun.questionResults, cleanQuestionIds);
+      newValidationResults = mergeValidationResults(detResults, aiRun.questionResults, cleanQuestionIds);
+      // Keep only stale/updated questions from merge
+      newValidationResults = newValidationResults.filter((r) => aiCandidateIds.has(r.questionId));
       aiModel = aiRun.model;
       aiSummary = aiRun.validationSummary;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'AI validation failed';
       console.error(`[VAL_SVC:${testId}] AI error:`, msg);
       await db.generatedTest
-        .update({ where: { id: testId }, data: { status: 'GENERATED' } })
+        .update({ where: { id: testId }, data: { status: test.status } })
         .catch(() => {});
       return { ok: false, error: `AI validation failed: ${msg}`, stage: 'AI_CALL' };
     }
+  } else if (detFailedIds.size > 0) {
+    // Some questions failed deterministic checks; no AI needed but record those failures
+    newValidationResults = detResults.filter((r) => detFailedIds.has(r.questionId));
+    aiSummary = 'Deterministic checks only; all stale questions had structural failures.';
   } else {
-    aiSummary = 'All questions failed deterministic checks; AI validation skipped.';
+    aiSummary = 'All questions are current — no AI validation required.';
   }
 
   const validationMs = Date.now() - startMs;
 
-  // 5. Compute stats
-  const passed = mergedResults.filter((r) => r.status === 'PASS').length;
-  const failed = mergedResults.filter((r) => r.status === 'FAIL').length;
-  const reviewNeeded = mergedResults.filter((r) => r.status === 'REVIEW').length;
+  // 8. Build the FULL result set by merging:
+  //    - Existing CURRENT QVRs (unchanged questions)
+  //    - New results for STALE/updated questions
+  const currentQVRMap = new Map<string, QVRRow>(
+    (existingTV?.questionResults ?? [])
+      .filter((qvr) => !aiCandidateIds.has(qvr.questionId)) // keep only unchanged
+      .map((qvr) => [qvr.questionId, qvr]),
+  );
+
+  const newResultMap = new Map<string, QuestionValidationInput>(
+    newValidationResults.map((r) => [r.questionId, r]),
+  );
+
+  // Assemble final result per question (maintaining order)
+  const allResults: Array<{
+    questionId: string;
+    order: number;
+    status: string;
+    confidence: number;
+    issues: object[];
+    suggestedFix: string | null;
+    factualNotes: string | null;
+    questionVersion: number;
+    isNew: boolean;
+  }> = test.questions.map((gq) => {
+    const newResult = newResultMap.get(gq.id);
+    if (newResult) {
+      return {
+        questionId: gq.id,
+        order: gq.order,
+        status: newResult.status,
+        confidence: newResult.confidence,
+        issues: newResult.issues as object[],
+        suggestedFix: newResult.suggestedFix ?? null,
+        factualNotes: newResult.factualNotes ?? null,
+        questionVersion: gq.questionVersion,
+        isNew: true,
+      };
+    }
+    const existing = currentQVRMap.get(gq.id);
+    if (existing) {
+      return {
+        questionId: gq.id,
+        order: gq.order,
+        status: existing.status,
+        confidence: existing.confidence,
+        issues: existing.issues as object[],
+        suggestedFix: existing.suggestedFix,
+        factualNotes: existing.factualNotes,
+        questionVersion: existing.questionVersion,
+        isNew: false,
+      };
+    }
+    // Fallback: no result at all — should not happen, but treat as FAIL
+    return {
+      questionId: gq.id,
+      order: gq.order,
+      status: 'FAIL',
+      confidence: 0,
+      issues: [{ type: 'OTHER', message: 'No validation result available.', severity: 'ERROR' }],
+      suggestedFix: null,
+      factualNotes: null,
+      questionVersion: gq.questionVersion,
+      isNew: true,
+    };
+  });
+
+  // 9. Compute aggregate stats
+  const passed = allResults.filter((r) => r.status === 'PASS').length;
+  const failed = allResults.filter((r) => r.status === 'FAIL').length;
+  const reviewNeeded = allResults.filter((r) => r.status === 'REVIEW').length;
 
   const allPass = failed === 0 && reviewNeeded === 0;
   const overallStatus: ValidationOverallStatus = allPass ? 'READY' : 'VALIDATION_FAILED';
@@ -157,46 +313,102 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
       ? `${test.questions.length - cleanQuestionIds.size} question(s) failed structural checks. `
       : '';
 
-  const validationSummary = deterministicSummary + aiSummary;
+  const incrementalNote = hasStaleQuestions
+    ? ` [Incremental: validated ${questionsValidated}/${test.questions.length} questions]`
+    : ` [All questions were current; no AI call needed]`;
 
-  // 6. Upsert validation + question results — avoid interactive transaction timeout on Neon.
-  //    Delete old records, create new validation + results with createMany, then update status.
+  const validationSummary = deterministicSummary + aiSummary + incrementalNote;
+
+  // 10. Write to DB:
+  //     - Upsert TestValidation (create if new, update aggregate if existing)
+  //     - For STALE questions: delete old QVR, insert new one (with updated questionVersion)
+  //     - Current questions: no QVR change (they keep their existing rows)
   try {
-    const prev = await db.testValidation.findUnique({ where: { testId } });
-    if (prev) {
-      await db.questionValidationResult.deleteMany({ where: { validationId: prev.id } });
-      await db.testValidation.delete({ where: { id: prev.id } });
+    let validationId: string;
+
+    if (!existingTV) {
+      // First validation — create new TestValidation
+      const tv = await db.testValidation.create({
+        data: {
+          testId,
+          totalQuestions: test.questions.length,
+          passed,
+          failed,
+          reviewNeeded,
+          overallStatus,
+          validationSummary,
+          validatorModel: aiModel,
+          validationMs,
+          validatedAt: new Date(),
+          contentVersion: test.contentVersion,
+        },
+      });
+      validationId = tv.id;
+
+      // Insert ALL question results (all are "new" on first run)
+      await db.questionValidationResult.createMany({
+        data: allResults.map((r) => ({
+          validationId,
+          questionId: r.questionId,
+          order: r.order,
+          status: r.status,
+          confidence: r.confidence,
+          issues: r.issues,
+          suggestedFix: r.suggestedFix,
+          factualNotes: r.factualNotes,
+          questionVersion: r.questionVersion,
+        })),
+      });
+    } else {
+      validationId = existingTV.id;
+
+      // Update TestValidation aggregate (keep the same record, just refresh stats)
+      await db.testValidation.update({
+        where: { id: validationId },
+        data: {
+          totalQuestions: test.questions.length,
+          passed,
+          failed,
+          reviewNeeded,
+          overallStatus,
+          validationSummary,
+          validatorModel: aiModel,
+          validationMs,
+          validatedAt: new Date(),
+          contentVersion: test.contentVersion,
+        },
+      });
+
+      // Delete old QVRs for stale/updated questions, then insert new ones
+      if (aiCandidateIds.size > 0) {
+        await db.questionValidationResult.deleteMany({
+          where: {
+            validationId,
+            questionId: { in: [...aiCandidateIds] },
+          },
+        });
+
+        const newQVRData = allResults
+          .filter((r) => r.isNew)
+          .map((r) => ({
+            validationId,
+            questionId: r.questionId,
+            order: r.order,
+            status: r.status,
+            confidence: r.confidence,
+            issues: r.issues,
+            suggestedFix: r.suggestedFix,
+            factualNotes: r.factualNotes,
+            questionVersion: r.questionVersion,
+          }));
+
+        if (newQVRData.length > 0) {
+          await db.questionValidationResult.createMany({ data: newQVRData });
+        }
+      }
     }
 
-    const validation = await db.testValidation.create({
-      data: {
-        testId,
-        totalQuestions: test!.questions.length,
-        passed,
-        failed,
-        reviewNeeded,
-        overallStatus,
-        validationSummary,
-        validatorModel: aiModel,
-        validationMs,
-        validatedAt: new Date(),
-        contentVersion: test!.contentVersion,
-      },
-    });
-
-    await db.questionValidationResult.createMany({
-      data: mergedResults.map((r) => ({
-        validationId: validation.id,
-        questionId: r.questionId,
-        order: r.order,
-        status: r.status,
-        confidence: r.confidence,
-        issues: r.issues as object[],
-        suggestedFix: r.suggestedFix ?? null,
-        factualNotes: r.factualNotes ?? null,
-      })),
-    });
-
+    // 11. Update test status
     await db.generatedTest.update({
       where: { id: testId },
       data: { status: overallStatus },
@@ -211,8 +423,18 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
   }
 
   console.log(
-    `[VAL_SVC:${testId}] ✅ ${overallStatus} | passed=${passed} failed=${failed} review=${reviewNeeded} | ${validationMs}ms`,
+    `[VAL_SVC:${testId}] ✅ ${overallStatus} | passed=${passed} failed=${failed} review=${reviewNeeded} | validated=${questionsValidated}/${test.questions.length} | ${validationMs}ms`,
   );
 
-  return { ok: true, overallStatus, passed, failed, reviewNeeded, validationMs, validationSummary };
+  return {
+    ok: true,
+    overallStatus,
+    passed,
+    failed,
+    reviewNeeded,
+    validationMs,
+    validationSummary,
+    questionsValidated,
+    staleQuestionIds,
+  };
 }

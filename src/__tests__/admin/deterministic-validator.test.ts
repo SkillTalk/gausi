@@ -29,6 +29,8 @@ function makeQuestion(overrides: Partial<GeneratedQuestion> = {}): GeneratedQues
     optionEEn: OPTION_E_EN,
     explanationEn: 'Mangal Pandey initiated the revolt.',
     correctOption: 'A',
+    questionVersion: 1,
+    answerSource: 'AI_VALIDATED' as const,
     createdAt: new Date().toISOString(),
     ...overrides,
   };

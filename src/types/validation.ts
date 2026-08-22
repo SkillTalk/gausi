@@ -54,6 +54,9 @@ export type StoredQuestionValidation = {
   issues: ValidationIssue[];
   suggestedFix: string | null;
   factualNotes: string | null;
+  /** Snapshot of GeneratedQuestion.questionVersion at validation time.
+   *  A result is CURRENT iff this equals the question's current questionVersion. */
+  questionVersion: number;
 };
 
 // Stored in TestValidation table
@@ -74,16 +77,26 @@ export type StoredTestValidation = {
   questionResults: StoredQuestionValidation[];
   /**
    * Derived at API time (not stored in DB).
-   * True when GeneratedTest.contentVersion > TestValidation.contentVersion,
-   * i.e. at least one question has been repaired since this validation ran.
+   * True when GeneratedTest.contentVersion > TestValidation.contentVersion.
    */
   isStale?: boolean;
   /**
    * Derived at API time (not stored in DB).
-   * questionIds repaired after this validation's validatedAt timestamp.
-   * These questions should show "Needs Revalidation" instead of old PASS/FAIL/REVIEW.
+   * questionIds where GeneratedQuestion.questionVersion != QuestionValidationResult.questionVersion.
+   * These questions are stale and must be sent to Agent 2 on the next Revalidate click.
+   * Supersedes the older repairedQuestionIds approach (kept for legacy renders).
+   */
+  staleQuestionIds?: string[];
+  /**
+   * @deprecated Use staleQuestionIds instead.
+   * questionIds repaired after this validation's validatedAt timestamp (legacy signal).
    */
   repairedQuestionIds?: string[];
+  /**
+   * How many questions were actually sent to AI in the most recent incremental run.
+   * e.g. 1 out of 25 total when only one question was stale.
+   */
+  questionsValidated?: number;
 };
 
 // AI validator response shape (structured JSON from OpenAI)

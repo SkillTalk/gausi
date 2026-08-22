@@ -518,6 +518,7 @@ describe('isRepairableValidationResult', () => {
       })),
       suggestedFix: null,
       factualNotes: null,
+      questionVersion: 1,
     };
   }
 

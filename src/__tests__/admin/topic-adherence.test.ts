@@ -617,6 +617,8 @@ function makeMinimalQuestion(overrides: Partial<GeneratedQuestion> = {}): Genera
     optionEEn: 'I do not want to answer',
     explanationEn: 'Ashoka was the emperor of the Mauryan dynasty.',
     correctOption: 'A',
+    questionVersion: 1,
+    answerSource: 'AI_VALIDATED' as const,
     createdAt: new Date().toISOString(),
     ...overrides,
   };

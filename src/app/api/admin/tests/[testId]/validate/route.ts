@@ -38,5 +38,8 @@ export async function POST(_req: Request, { params }: Params) {
     reviewNeeded: result.reviewNeeded,
     validationSummary: result.validationSummary,
     validationMs: result.validationMs,
+    /** How many questions were sent to AI (incremental: may be < totalQuestions). */
+    questionsValidated: result.questionsValidated,
+    staleQuestionIds: result.staleQuestionIds,
   });
 }

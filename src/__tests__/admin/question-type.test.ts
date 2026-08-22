@@ -486,6 +486,8 @@ describe('ai-validator includes type-specific rules', () => {
       explanationHi: 'स्पष्टीकरण',
       explanationEn: 'Explanation',
       correctOption: 'C',
+      questionVersion: 1,
+      answerSource: 'AI_VALIDATED' as const,
       createdAt: new Date().toISOString(),
     };
 

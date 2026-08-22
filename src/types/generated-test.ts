@@ -121,6 +121,10 @@ export type GeneratedQuestion = {
   optionEEn: string;
   explanationEn: string;
   correctOption: string;
+  /** Per-question content version. Incremented on repair or answer override. */
+  questionVersion: number;
+  /** Who set the correct answer for this question. */
+  answerSource: 'AI_VALIDATED' | 'ADMIN_VERIFIED';
   createdAt: string;
 };
 

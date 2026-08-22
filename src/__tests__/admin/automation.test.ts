@@ -236,7 +236,7 @@ describe('runAutomation', () => {
     mockRunUpdate.mockResolvedValue({} as never);
     mockConfigUpdate.mockResolvedValue({} as never);
     mockGenerate.mockResolvedValue({ ok: true, testId: 'test-1', slug: 'test-slug', generationMs: 1000 });
-    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 500, validationSummary: '' });
+    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 500, validationSummary: '', questionsValidated: 5, staleQuestionIds: [] });
     mockSchedule.mockResolvedValue({ ok: true, data: { publishAt: new Date() } });
 
     const result = await runAutomation({ force: true, overrideDateStr: '2026-08-22' });
@@ -282,7 +282,7 @@ describe('runAutomation', () => {
     mockRunUpdate.mockResolvedValue({} as never);
     mockConfigUpdate.mockResolvedValue({} as never);
     mockGenerate.mockResolvedValue({ ok: true, testId: 'test-2', slug: 'slug-2', generationMs: 900 });
-    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 25, failed: 0, reviewNeeded: 0, validationMs: 400, validationSummary: '' });
+    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 25, failed: 0, reviewNeeded: 0, validationMs: 400, validationSummary: '', questionsValidated: 25, staleQuestionIds: [] });
     mockSchedule.mockResolvedValue({ ok: true, data: { publishAt: new Date() } });
 
     const result = await runAutomation({ overrideDateStr: '2026-08-23' });
@@ -321,6 +321,8 @@ describe('runAutomation', () => {
       reviewNeeded: 0,
       validationMs: 300,
       validationSummary: '5 questions have factual errors.',
+      questionsValidated: 25,
+      staleQuestionIds: [],
     });
 
     const result = await runAutomation({ overrideDateStr: '2026-08-25' });
@@ -353,7 +355,7 @@ describe('runAutomation', () => {
     mockRunUpdate.mockResolvedValue({} as never);
     mockConfigUpdate.mockResolvedValue({} as never);
     mockGenerate.mockResolvedValue({ ok: true, testId: 'test-5', slug: 'slug-5', generationMs: 600 });
-    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 200, validationSummary: '' });
+    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 200, validationSummary: '', questionsValidated: 5, staleQuestionIds: [] });
     mockSchedule.mockResolvedValue({ ok: true, data: { publishAt: new Date() } });
 
     const result = await runAutomation({ overrideDateStr: '2026-08-27' });
@@ -370,7 +372,7 @@ describe('runAutomation', () => {
     mockRunUpdate.mockResolvedValue({} as never);
     mockConfigUpdate.mockResolvedValue({} as never);
     mockGenerate.mockResolvedValue({ ok: true, testId: 'test-6', slug: 'slug-6', generationMs: 500 });
-    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 100, validationSummary: '' });
+    mockValidate.mockResolvedValue({ ok: true, overallStatus: 'READY', passed: 5, failed: 0, reviewNeeded: 0, validationMs: 100, validationSummary: '', questionsValidated: 5, staleQuestionIds: [] });
 
     const result = await runAutomation({ overrideDateStr: '2026-08-28' });
     expect(result.status).toBe('SUCCESS');

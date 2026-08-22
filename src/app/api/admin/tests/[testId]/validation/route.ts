@@ -2,14 +2,14 @@
  * GET /api/admin/tests/[testId]/validation
  *
  * Returns the latest stored validation result for a test, augmented with
- * freshness metadata derived from QuestionRepairLog and GeneratedTest.contentVersion.
+ * per-question freshness metadata.
  *
  * Added fields (derived, not stored in DB):
- *   isStale:             true when test was repaired since last validation
- *   repairedQuestionIds: questionIds repaired after validatedAt
- *
- * A QuestionValidationResult produced at contentVersion N must NOT be rendered
- * as current for a question at contentVersion N+1.
+ *   isStale:            true when test.contentVersion > validation.contentVersion
+ *   staleQuestionIds:   questionIds where GQ.questionVersion ≠ QVR.questionVersion
+ *                       (authoritative: used for "Revalidate N Questions" button)
+ *   repairedQuestionIds: legacy list from QuestionRepairLog (kept for old renders)
+ *   questionsValidated:  from the most recent incremental run (stored in DB)
  *
  * Returns { validation: null } if no validation has been run yet.
  * Does NOT trigger re-validation (that is POST /validate).
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { computeValidationFreshness } from '@/lib/admin/validation-freshness';
+import { computeValidationFreshness, computeStaleQuestions } from '@/lib/admin/validation-freshness';
 
 type Params = { params: Promise<{ testId: string }> };
 
@@ -34,7 +34,13 @@ export async function GET(_req: Request, { params }: Params) {
       }),
       db.generatedTest.findUnique({
         where: { id: testId },
-        select: { contentVersion: true },
+        select: {
+          contentVersion: true,
+          questions: {
+            select: { id: true, questionVersion: true },
+            orderBy: { order: 'asc' },
+          },
+        },
       }),
       db.questionRepairLog.findMany({
         where: { testId },
@@ -47,7 +53,7 @@ export async function GET(_req: Request, { params }: Params) {
       return NextResponse.json({ validation: null });
     }
 
-    // Compute freshness: compare test.contentVersion vs validation.contentVersion
+    // Legacy test-level freshness (contentVersion comparison)
     const { isStale, repairedQuestionIds } = computeValidationFreshness(
       testRow?.contentVersion ?? validation.contentVersion,
       validation.contentVersion,
@@ -55,10 +61,20 @@ export async function GET(_req: Request, { params }: Params) {
       new Date(validation.validatedAt),
     );
 
+    // Per-question freshness (authoritative for incremental revalidation UI)
+    const staleQuestionIds = computeStaleQuestions(
+      testRow?.questions ?? [],
+      validation.questionResults.map((qvr) => ({
+        questionId: qvr.questionId,
+        questionVersion: (qvr as typeof qvr & { questionVersion?: number }).questionVersion ?? 1,
+      })),
+    );
+
     return NextResponse.json({
       validation: {
         ...validation,
         isStale,
+        staleQuestionIds,
         repairedQuestionIds,
       },
     });

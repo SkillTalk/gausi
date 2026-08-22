@@ -393,6 +393,8 @@ export async function repairQuestion(
           explanationHi: repairedManual.explanationHi,
           explanationEn: repairedManual.explanationEn,
           correctOption: repairedManual.correctOption,
+          questionVersion: { increment: 1 }, // per-question versioning: only this question advances
+          answerSource: 'AI_VALIDATED',       // repair resets source (MANUAL still uses AI JSON struct)
         },
       });
 
@@ -597,6 +599,8 @@ export async function repairQuestion(
         explanationHi: repaired.explanationHi,
         explanationEn: repaired.explanationEn,
         correctOption: repaired.correctOption,
+        questionVersion: { increment: 1 }, // per-question versioning: only this question advances
+        answerSource: 'AI_VALIDATED',       // AI produced the content; reset any prior admin override
       },
     });
 

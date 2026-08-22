@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { GeneratedTestWithQuestions, GeneratedQuestion } from '@/types/generated-test';
 import type { StoredTestValidation, StoredQuestionValidation, ValidationIssue } from '@/types/validation';
 import type { RepairMode } from '@/lib/admin/repair.service';
+import { isRepairableValidationResult } from '@/lib/admin/repair-helpers';
 
 type Params = { testId: string };
 
@@ -85,17 +86,28 @@ type RepairModalProps = {
   testId: string;
   question: GeneratedQuestion;
   qVal: StoredQuestionValidation;
+  /** Test-level scope fields forwarded from the parent page's test object. */
+  strictTopicScope?: string | null;
+  excludeScope?: string | null;
+  topicAdherenceMode?: string | null;
   onClose: () => void;
   onRepaired: () => void;
 };
 
-function RepairModal({ testId, question, qVal, onClose, onRepaired }: RepairModalProps) {
-  const [mode, setMode] = useState<RepairMode>('AUTO_FIX');
+function RepairModal({
+  testId, question, qVal,
+  strictTopicScope, excludeScope, topicAdherenceMode,
+  onClose, onRepaired,
+}: RepairModalProps) {
+  const issues = qVal.issues as ValidationIssue[];
+  const hasScopeFail = issues.some((i) => i.type === 'TOPIC_SCOPE_FAIL');
+
+  // Default to REPLACE for scope failures — rewriting an out-of-scope question
+  // often produces a weak question; replacing with a fresh in-scope one is safer.
+  const [mode, setMode] = useState<RepairMode>(hasScopeFail ? 'REPLACE' : 'AUTO_FIX');
   const [instruction, setInstruction] = useState('');
   const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const issues = qVal.issues as ValidationIssue[];
 
   async function handleRepair() {
     setRepairing(true);
@@ -138,20 +150,54 @@ function RepairModal({ testId, question, qVal, onClose, onRepaired }: RepairModa
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 
-        {/* Validator feedback */}
-        {issues.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Problem</p>
-            {issues.map((issue, i) => (
-              <div key={i} className={`text-xs rounded px-2 py-1.5 ${
-                issue.severity === 'ERROR' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
-              }`}>
-                <span className="font-semibold">[{issue.type}]</span> {issue.message}
+        {/* TOPIC_SCOPE_FAIL prominent banner */}
+        {hasScopeFail && (
+          <div className="bg-orange-50 border border-orange-300 rounded-xl px-4 py-3 space-y-2">
+            <p className="text-sm font-bold text-orange-800 flex items-center gap-2">
+              🚫 Outside Strict Topic Scope
+            </p>
+            <div className="space-y-1">
+              {issues
+                .filter((i) => i.type === 'TOPIC_SCOPE_FAIL')
+                .map((issue, idx) => (
+                  <p key={idx} className="text-xs text-orange-700">{issue.message}</p>
+                ))}
+            </div>
+            {strictTopicScope && (
+              <div className="text-xs bg-white border border-orange-200 rounded-lg px-3 py-2 mt-1">
+                <span className="font-semibold text-orange-800 block mb-0.5">Required Scope</span>
+                <span className="text-orange-700">{strictTopicScope}</span>
               </div>
-            ))}
+            )}
+            {excludeScope && (
+              <div className="text-xs bg-white border border-orange-200 rounded-lg px-3 py-2">
+                <span className="font-semibold text-orange-800 block mb-0.5">Excluded</span>
+                <span className="text-orange-700">{excludeScope}</span>
+              </div>
+            )}
+            <p className="text-xs text-orange-600 italic mt-1">
+              Recommended: <strong>Replace with New</strong> — rewriting an out-of-scope question often produces a weak result.
+            </p>
           </div>
         )}
-        {qVal.suggestedFix && (
+
+        {/* Other validator feedback (non-scope issues) */}
+        {issues.filter((i) => i.type !== 'TOPIC_SCOPE_FAIL').length > 0 && (
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Problem</p>
+            {issues
+              .filter((i) => i.type !== 'TOPIC_SCOPE_FAIL')
+              .map((issue, i) => (
+                <div key={i} className={`text-xs rounded px-2 py-1.5 ${
+                  issue.severity === 'ERROR' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
+                }`}>
+                  <span className="font-semibold">[{issue.type}]</span> {issue.message}
+                </div>
+              ))}
+          </div>
+        )}
+        {/* Non-scope issues only — scope suggested fix shown in scope banner */}
+        {qVal.suggestedFix && !hasScopeFail && (
           <div className="text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
             <span className="font-semibold text-slate-600">Suggested fix: </span>
             {qVal.suggestedFix}
@@ -178,8 +224,12 @@ function RepairModal({ testId, question, qVal, onClose, onRepaired }: RepairModa
           </div>
           <p className="text-xs text-slate-400 mt-1.5">
             {mode === 'AUTO_FIX'
-              ? 'Rewrite the existing question to fix the issue, preserving the learning objective.'
-              : 'Discard the question and generate a fresh one on the same topic.'}
+              ? hasScopeFail
+                ? 'Try to rewrite this question so it directly tests the declared topic scope. Use only if the learning objective can be preserved within scope.'
+                : 'Rewrite the existing question to fix the issue, preserving the learning objective.'
+              : hasScopeFail
+                ? 'Discard this question and generate a completely new one strictly within the declared topic scope and exclusions.'
+                : 'Discard the question and generate a fresh one on the same topic.'}
           </p>
         </div>
 
@@ -193,11 +243,26 @@ function RepairModal({ testId, question, qVal, onClose, onRepaired }: RepairModa
             onChange={(e) => setInstruction(e.target.value)}
             rows={3}
             maxLength={500}
-            placeholder={`e.g. Keep the question focused on South African Satyagraha, not Mandela.`}
+            placeholder={
+              hasScopeFail
+                ? 'e.g. Focus on INC sessions and presidential elections, not broader independence movement.'
+                : 'e.g. Keep the question focused on South Indian Satyagraha, not Mandela.'
+            }
             className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
           />
           <p className="text-xs text-slate-400 mt-0.5">{instruction.length}/500</p>
         </div>
+
+        {/* Scope mode indicator */}
+        {topicAdherenceMode && (
+          <p className="text-xs text-slate-400">
+            Topic Adherence Mode:{' '}
+            <span className={`font-semibold ${topicAdherenceMode === 'STRICT' ? 'text-amber-700' : 'text-slate-600'}`}>
+              {topicAdherenceMode}
+            </span>
+            {topicAdherenceMode === 'STRICT' && ' — repaired question will be re-validated for scope compliance.'}
+          </p>
+        )}
 
         {/* Error */}
         {error && (
@@ -271,10 +336,12 @@ function QuestionCard({
   const [showDetails, setShowDetails] = useState(false);
 
   const hasIssues = !needsRevalidation && qVal && (qVal.issues as ValidationIssue[]).length > 0;
-  // Allow re-repair if already repaired (needsRevalidation) OR if old val shows FAIL/REVIEW
+  // Allow repair if: already repaired (needsRevalidation) OR validation marks as repairable.
+  // isRepairableValidationResult() covers FAIL, REVIEW, and TOPIC_SCOPE_FAIL / DUPLICATE_QUESTION
+  // even when the AI incorrectly marks the overall status as PASS.
   const canRepair = !isPublished && (
     needsRevalidation ||
-    (qVal && (qVal.status === 'FAIL' || qVal.status === 'REVIEW'))
+    (qVal != null && isRepairableValidationResult(qVal))
   );
 
   return (
@@ -322,8 +389,8 @@ function QuestionCard({
         <p className="text-xs text-slate-500 mt-0.5">{q.explanationEn}</p>
       </div>
 
-      {/* Validation details — only for FAIL/REVIEW AND only when the result is fresh */}
-      {(needsRevalidation || (qVal && qVal.status !== 'PASS')) && (
+      {/* Validation details — for FAIL/REVIEW/repairable issues AND only when the result is fresh */}
+      {(needsRevalidation || (qVal != null && (qVal.status !== 'PASS' || isRepairableValidationResult(qVal)))) && (
         <div className="pl-10 pt-2 border-t border-slate-100 space-y-2">
           {needsRevalidation ? (
             /* ── Repaired question: suppress stale issues, show revalidation prompt ── */
@@ -1012,6 +1079,9 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
           testId={testId}
           question={repairTarget.question}
           qVal={repairTarget.qVal}
+          strictTopicScope={(test as GeneratedTestWithQuestions & { strictTopicScope?: string | null }).strictTopicScope}
+          excludeScope={(test as GeneratedTestWithQuestions & { excludeScope?: string | null }).excludeScope}
+          topicAdherenceMode={(test as GeneratedTestWithQuestions & { topicAdherenceMode?: string | null }).topicAdherenceMode}
           onClose={() => setRepairTarget(null)}
           onRepaired={() => { void handleRepairSuccess(); }}
         />

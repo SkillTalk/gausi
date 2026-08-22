@@ -177,6 +177,11 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
     }
   } else {
     // REPLACE
+    const isScopeFail = ctx.validatorIssues.some((i) => i.type === 'TOPIC_SCOPE_FAIL');
+    const isDuplicate = ctx.validatorIssues.some(
+      (i) => i.type === 'DUPLICATE_QUESTION' || i.type === 'NEAR_DUPLICATE',
+    );
+
     lines.push('─── Original Question Being Replaced ───');
     lines.push(`Type: ${ctx.question.questionType}`);
     lines.push(`(Removed due to validation failure: ${
@@ -186,10 +191,23 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
     lines.push('─── Instructions ───');
     lines.push(
       `Generate a completely NEW question from the same exam/category/topic/difficulty. ` +
-      `Preferred type: ${ctx.question.questionType} (or DIRECT if the type is not suitable). ` +
-      'Do NOT reuse the original question text. ' +
-      'The new question must be factually accurate and unambiguous.'
+      `Preferred type: ${ctx.question.questionType} (or DIRECT if that type is not suitable for a fresh question). ` +
+      'The new question must be factually accurate and unambiguous.',
     );
+
+    if (isScopeFail) {
+      lines.push('');
+      lines.push('⚠️  SCOPE FAILURE — READ CAREFULLY:');
+      lines.push('The previous question was REJECTED because it tested broader adjacent history, not the specific declared topic scope.');
+      lines.push('Your replacement MUST directly test the exact topic and scope declared in the "Topic Scope Boundary" section above.');
+      lines.push('Do NOT generate another general history/movement question. Every detail of the new question must be traceable to the declared topic scope.');
+      lines.push('If you cannot stay within the scope, say so clearly — do not invent a vague question that merely mentions the topic name.');
+    }
+
+    if (isDuplicate) {
+      lines.push('');
+      lines.push('⚠️  DUPLICATE — the original question was flagged as duplicate. Your replacement must test a DIFFERENT learning objective, event, or fact than all existing questions listed below.');
+    }
   }
 
   if (ctx.adminInstruction) {

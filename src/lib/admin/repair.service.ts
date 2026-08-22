@@ -412,8 +412,12 @@ export async function repairQuestion(
   }
 
   // ── 8. Call OpenAI (AUTO_FIX / REPLACE) ──────────────────────────────────
-  let rawAI: Record<string, unknown>;
-  try {
+
+  /**
+   * One focused AI call for the repair. Returns the parsed JSON object from the AI.
+   * Throws on network/parse error.
+   */
+  async function callRepairAI(promptCtx: RepairPromptContext): Promise<Record<string, unknown>> {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -424,11 +428,11 @@ export async function repairQuestion(
         model: OPENAI_MODEL,
         messages: [
           { role: 'system', content: buildRepairSystemPrompt() },
-          { role: 'user', content: buildRepairUserPrompt(ctx) },
+          { role: 'user', content: buildRepairUserPrompt(promptCtx) },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.5, // lower temperature for factual repairs
-        max_tokens: 2000, // single question needs far less than full generation
+        temperature: 0.5,
+        max_tokens: 2000,
       }),
     });
 
@@ -441,17 +445,64 @@ export async function repairQuestion(
     const data = await response.json() as OAResp;
     const raw = data.choices?.[0]?.message?.content ?? '';
     try {
-      rawAI = JSON.parse(raw) as Record<string, unknown>;
+      return JSON.parse(raw) as Record<string, unknown>;
     } catch {
       throw new Error('OpenAI returned invalid JSON for repaired question.');
     }
+  }
+
+  let rawAI: Record<string, unknown>;
+  try {
+    rawAI = await callRepairAI(ctx);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'AI call failed';
     return { ok: false, error: `Repair AI call failed: ${msg}`, stage: 'AI_CALL' };
   }
 
-  // ── 9. Structural validation ───────────────────────────────────────────────
-  const structCheck = validateRepairedQuestion(rawAI, existingTexts);
+  // ── 9. Structural validation — with one duplicate retry for AUTO_FIX ───────
+  //
+  // If the ONLY failure is "duplicates an existing question", attempt exactly
+  // ONE retry with explicit deduplication feedback before giving up.
+  // This keeps the retry budget minimal and avoids an AI loop.
+
+  function isDuplicateOnlyFailure(errors: string[]): boolean {
+    return errors.length > 0 && errors.every((e) => e.toLowerCase().includes('duplicate'));
+  }
+
+  let structCheck = validateRepairedQuestion(rawAI, existingTexts);
+
+  if (!structCheck.valid && isDuplicateOnlyFailure(structCheck.errors) && ctx.repairMode === 'AUTO_FIX') {
+    // Build retry context with explicit deduplication feedback
+    const retryInstruction =
+      'Your previous response duplicated an existing question in this test. ' +
+      'Produce a materially different question that directly tests the same learning objective ' +
+      'but uses a completely different angle, event, or fact. ' +
+      'Do not use the same key terms, dates, or answer from the original question.' +
+      (ctx.adminInstruction ? `\n\nOriginal instruction: ${ctx.adminInstruction}` : '');
+
+    const retryCtx: RepairPromptContext = { ...ctx, adminInstruction: retryInstruction };
+
+    try {
+      rawAI = await callRepairAI(retryCtx);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'AI call failed on retry';
+      return { ok: false, error: `Repair AI retry failed: ${msg}`, stage: 'AI_CALL' };
+    }
+
+    structCheck = validateRepairedQuestion(rawAI, existingTexts);
+
+    // If retry STILL duplicates, give a clear actionable error
+    if (!structCheck.valid && isDuplicateOnlyFailure(structCheck.errors)) {
+      return {
+        ok: false,
+        error:
+          'Auto Fix produced a duplicate question twice. ' +
+          'Use "Replace with New" to generate a completely fresh question on this topic.',
+        stage: 'STRUCT_CHECK',
+      };
+    }
+  }
+
   if (!structCheck.valid) {
     return {
       ok: false,

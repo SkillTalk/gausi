@@ -1,15 +1,24 @@
 /**
  * Validator consistency utilities.
  *
- * Detects self-contradictory AI validation output — specifically the case
- * where the validator marks a question FAIL but its own suggestedFix endorses
- * the current marked correct answer.
+ * Detects and classifies self-contradictory AI validation output — where the
+ * validator marks a question FAIL but its own suggestedFix (and/or factualNotes)
+ * endorses the current marked correct answer.
  *
- * Example that triggered the production bug:
- *   Question: Arrange rivers in order they meet the sea (A = 1,2,3,4)
- *   AI issues: "sequence for rivers 2,3,4 is not 2,3,4"
- *   AI suggestedFix: "Correct sequence should be 1,2,3,4"
- *   → contradiction: fix = current answer → downgrade FAIL→REVIEW
+ * Two contradiction strengths:
+ *
+ * STRONG — suggestedFix clearly endorses the current answer AND no independent
+ *   blocking issues exist (TOPIC_SCOPE_FAIL, AMBIGUITY, etc.). Warrants an AI
+ *   retry and potential normalization to PASS.
+ *
+ * AMBIGUOUS — suggestedFix loosely endorses the answer but independent blocking
+ *   issues also exist. Warrants FAIL→REVIEW downgrade only (no auto-PASS).
+ *
+ * Production example (Geography, Q25):
+ *   correctOption A = "1, 3, 4, 2"
+ *   AI issues:      "The correct chronological order is incorrect."
+ *   AI suggestedFix: "The correct answer should be 1, 3, 4, 2"
+ *   → STRONG contradiction → retry → normalize to PASS
  *
  * This module is pure (no DB calls) and easily unit-testable.
  *
@@ -17,7 +26,17 @@
  */
 
 import type { GeneratedQuestion } from '@/types/generated-test';
-import type { QuestionValidationInput } from '@/types/validation';
+import type { QuestionValidationInput, ValidationIssue } from '@/types/validation';
+
+// Issue types that constitute independent blocking reasons.
+// A self-contradiction cannot override these — they require genuine admin review.
+const INDEPENDENT_BLOCKING_TYPES = new Set([
+  'TOPIC_SCOPE_FAIL',
+  'AMBIGUITY',
+  'NEAR_DUPLICATE',
+  'TRANSLATION_MISMATCH',
+  'DUPLICATE_QUESTION',
+]);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -91,19 +110,96 @@ export function isContradictoryFix(
   return false;
 }
 
-// ─── Batch guard ─────────────────────────────────────────────────────────────
+// ─── Contradiction strength classification ────────────────────────────────────
 
 /**
+ * Returns true when factualNotes appear to support (not contradict) the
+ * current correct answer. Uses the same text-overlap heuristics as isContradictoryFix.
+ */
+export function factualNotesSupportCurrentAnswer(
+  factualNotes: string | null,
+  correctOption: string,
+  question: GeneratedQuestion,
+): boolean {
+  if (!factualNotes?.trim()) return false;
+  return isContradictoryFix(factualNotes, correctOption, question);
+}
+
+export type ContradictionClass = 'STRONG' | 'AMBIGUOUS' | 'NONE';
+
+/**
+ * Classify the strength of a potential self-contradiction in a validation result.
+ *
+ * STRONG  — suggestedFix clearly endorses the current answer AND no independent
+ *           blocking issues (TOPIC_SCOPE_FAIL, AMBIGUITY, NEAR_DUPLICATE, etc.)
+ *           Warrants an AI retry and potential auto-PASS normalization.
+ *
+ * AMBIGUOUS — suggestedFix appears to endorse the current answer BUT independent
+ *             blocking issues also exist.
+ *             Warrants FAIL→REVIEW downgrade only (no retry or auto-PASS).
+ *
+ * NONE    — No evidence of self-contradiction in suggestedFix.
+ */
+export function classifyContradiction(
+  result: QuestionValidationInput,
+  question: GeneratedQuestion,
+): ContradictionClass {
+  if (result.status !== 'FAIL' || !result.suggestedFix) return 'NONE';
+
+  // suggestedFix must clearly endorse current answer
+  if (!isContradictoryFix(result.suggestedFix, question.correctOption, question)) return 'NONE';
+
+  // Independent blocking issues → cannot auto-resolve (downgrade to REVIEW at most)
+  const hasBlockingIssue = result.issues.some(
+    (i) => INDEPENDENT_BLOCKING_TYPES.has(i.type),
+  );
+
+  return hasBlockingIssue ? 'AMBIGUOUS' : 'STRONG';
+}
+
+// ─── Issue helpers ────────────────────────────────────────────────────────────
+
+/** Build a clean PASS QuestionValidationInput after contradiction resolution. */
+export function buildResolvedPassResult(
+  original: QuestionValidationInput,
+  source: 'RETRY_PASS' | 'NORMALIZED',
+  retryFactualNotes?: string | null,
+): QuestionValidationInput {
+  const note =
+    source === 'RETRY_PASS'
+      ? `Retry validation passed after self-contradiction resolution.${retryFactualNotes ? ` ${retryFactualNotes}` : ''}`
+      : 'Validator self-contradiction resolved: both original and retry validation endorsed the current marked answer while claiming it was wrong. Normalized to PASS.';
+
+  return {
+    questionId: original.questionId,
+    order: original.order,
+    status: 'PASS',
+    confidence: source === 'RETRY_PASS' ? 0.9 : 0.85,
+    issues: [],
+    suggestedFix: null,
+    factualNotes: note,
+  };
+}
+
+/** Build a REVIEW QuestionValidationInput for an AMBIGUOUS contradiction. */
+export function buildAmbiguousReviewResult(original: QuestionValidationInput): QuestionValidationInput {
+  const metaIssue: ValidationIssue = {
+    type: 'OTHER',
+    message:
+      'Validator output appears self-contradictory (suggestedFix endorses current answer) ' +
+      'but independent issues also exist. Downgraded to REVIEW for admin inspection.',
+    severity: 'WARNING',
+  };
+  return { ...original, status: 'REVIEW', issues: [...original.issues, metaIssue] };
+}
+
+// ─── Legacy batch guard (kept for backward compat with existing tests) ────────
+
+/**
+ * @deprecated Use resolveContradictions (in validation.service.ts) instead.
  * Apply contradiction guard to a set of validation results.
- *
- * For each FAIL result: if the suggestedFix endorses the current correctOption,
- * downgrade status from FAIL→REVIEW and append a VALIDATOR_INCONSISTENT issue.
- *
- * This prevents a self-contradictory AI response from permanently blocking a
- * question that is likely correct. The REVIEW status ensures admin inspection
- * rather than silent PASS or hard FAIL.
- *
- * Maximum one downgrade per result — no AI loops involved.
+ * Always downgrades FAIL→REVIEW for any detected contradiction.
+ * The new flow distinguishes STRONG (retry+PASS) from AMBIGUOUS (REVIEW).
  */
 export function applyContradictionGuard(
   results: QuestionValidationInput[],
@@ -119,26 +215,27 @@ export function applyContradictionGuard(
     const q = questionMap.get(r.questionId);
     if (!q) return r;
 
-    if (isContradictoryFix(r.suggestedFix, q.correctOption, q)) {
-      downgradedIds.push(r.questionId);
-      return {
-        ...r,
-        status: 'REVIEW' as const,
-        issues: [
-          ...r.issues,
-          {
-            type: 'OTHER' as const,
-            message:
-              'Validator output is self-contradictory: the suggestedFix endorses the ' +
-              'current marked correct answer while status was FAIL. Downgraded to REVIEW ' +
-              'for admin inspection. The question may already be correct — verify manually ' +
-              'or run Revalidate to get a fresh assessment.',
-            severity: 'WARNING' as const,
-          },
-        ],
-      };
-    }
-    return r;
+    const cls = classifyContradiction(r, q);
+    if (cls === 'NONE') return r;
+
+    downgradedIds.push(r.questionId);
+    return cls === 'STRONG'
+      ? {
+          ...r,
+          status: 'REVIEW' as const,
+          issues: [
+            ...r.issues,
+            {
+              type: 'OTHER' as const,
+              message:
+                'Validator output is self-contradictory: the suggestedFix endorses the ' +
+                'current marked correct answer while status was FAIL. Downgraded to REVIEW ' +
+                'for admin inspection.',
+              severity: 'WARNING' as const,
+            },
+          ],
+        }
+      : buildAmbiguousReviewResult(r);
   });
 
   return { results: corrected, downgradedIds };

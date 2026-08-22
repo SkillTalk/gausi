@@ -337,6 +337,123 @@ export async function runAIValidation(
   return { questionResults, overallStatus, validationSummary, model: VALIDATION_MODEL };
 }
 
+// ─── Contradiction retry ──────────────────────────────────────────────────────
+
+/**
+ * Run a focused single-question AI retry when a previous validation was
+ * self-contradictory (the validator's suggestedFix endorsed the current answer
+ * while also setting status=FAIL).
+ *
+ * Uses the same system prompt as regular validation for format consistency,
+ * but includes explicit contradiction context so the AI re-evaluates from scratch.
+ *
+ * Maximum ONE call — no loop. Caller decides what to do with the result.
+ */
+export async function retryContradictedQuestion(
+  apiKey: string,
+  question: GeneratedQuestion,
+  previousResult: {
+    issues: Array<{ type: string; message: string; severity: string }>;
+    suggestedFix: string | null;
+    factualNotes: string | null;
+  },
+  exam: string,
+  category: string,
+  topic: string,
+  difficulty: string,
+  scope: TopicScopeContext | null,
+): Promise<AIQuestionValidation> {
+  const systemPrompt = buildSystemPrompt(exam, category, topic, difficulty, scope);
+
+  const correctEnKey = `option${question.correctOption}En` as keyof GeneratedQuestion;
+  const correctOptionText = (question[correctEnKey] as string | undefined) ?? '';
+
+  const userPrompt = [
+    `Re-evaluate ONE question for ${exam}, category "${category}", topic "${topic}".`,
+    '',
+    '⚠️  YOUR PREVIOUS VALIDATION WAS INTERNALLY INCONSISTENT.',
+    '',
+    `You returned status=FAIL with issue(s): "${previousResult.issues.map((i) => i.message).join('; ')}"`,
+    ...(previousResult.suggestedFix
+      ? [`Your suggested fix was: "${previousResult.suggestedFix}"`]
+      : []),
+    ...(previousResult.factualNotes
+      ? [`Your factual notes were: "${previousResult.factualNotes}"`]
+      : []),
+    '',
+    `The current marked correct answer is Option ${question.correctOption} = "${correctOptionText}"`,
+    '',
+    'Notice: Your suggested fix described the SAME value as the current marked answer.',
+    'You flagged the answer as wrong while simultaneously suggesting the same answer as the fix — that is a self-contradiction.',
+    '',
+    'INSTRUCTIONS FOR THIS RE-EVALUATION:',
+    '1. Evaluate the question completely from scratch with fresh reasoning.',
+    '2. Do NOT simply repeat your previous response.',
+    '3. Return ONE internally consistent result: PASS, FAIL, or REVIEW.',
+    '4. If you cannot find a genuine factual error (i.e. the current answer IS correct), return PASS.',
+    '5. If you find a genuine different error with a clearly different correction, return FAIL.',
+    '6. Apply the self-consistency check: if your suggestedFix would endorse the current answer, return PASS instead of FAIL.',
+    '',
+    'Question to re-evaluate:',
+    JSON.stringify({
+      order: question.order,
+      questionType: (question as GeneratedQuestion & { questionType?: string }).questionType ?? 'DIRECT',
+      questionHi: question.questionHi,
+      questionEn: question.questionEn,
+      optionA: { hi: question.optionAHi, en: question.optionAEn },
+      optionB: { hi: question.optionBHi, en: question.optionBEn },
+      optionC: { hi: question.optionCHi, en: question.optionCEn },
+      optionD: { hi: question.optionDHi, en: question.optionDEn },
+      correctOption: question.correctOption,
+      explanationHi: question.explanationHi,
+      explanationEn: question.explanationEn,
+    }, null, 2),
+    '',
+    'Return a JSON object with exactly this shape (same as regular validation, for 1 question):',
+    JSON.stringify({
+      overallStatus: 'READY or VALIDATION_FAILED',
+      validationSummary: '1-sentence summary',
+      questions: [{
+        order: question.order,
+        status: 'PASS or FAIL or REVIEW',
+        confidence: 0.9,
+        issues: [],
+        suggestedFix: null,
+        factualNotes: null,
+      }],
+    }, null, 2),
+  ].join('\n');
+
+  const raw = await callOpenAI(apiKey, systemPrompt, userPrompt);
+
+  // Parse — reuse parseAIOutput which expects the standard batch format (1 question)
+  let parsed: AIValidationOutput;
+  try {
+    parsed = parseAIOutput(raw, 1);
+  } catch {
+    // If the AI didn't return the standard format, try parsing the single-result fallback
+    try {
+      const obj = JSON.parse(raw) as Record<string, unknown>;
+      if (typeof obj.status === 'string') {
+        // AI returned a flat single-result object instead of the batch wrapper
+        return {
+          order: question.order,
+          status: (obj.status as 'PASS' | 'FAIL' | 'REVIEW'),
+          confidence: typeof obj.confidence === 'number' ? obj.confidence : 0.8,
+          issues: Array.isArray(obj.issues) ? (obj.issues as AIQuestionValidation['issues']) : [],
+          suggestedFix: typeof obj.suggestedFix === 'string' ? obj.suggestedFix : null,
+          factualNotes: typeof obj.factualNotes === 'string' ? obj.factualNotes : null,
+        };
+      }
+    } catch {
+      // fall through
+    }
+    throw new Error(`Contradiction retry returned unparseable response: ${raw.slice(0, 300)}`);
+  }
+
+  return parsed.questions[0];
+}
+
 /**
  * Merges deterministic results with AI results.
  *

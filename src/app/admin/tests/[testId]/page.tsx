@@ -777,7 +777,12 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
           </span>
         )}
         {isStale && <span className="text-amber-500 font-medium">(snapshot — stale)</span>}
-        {!isStale && staleCount === 0 && <span className="text-green-600 font-medium">✓ All current</span>}
+        {!isStale && staleCount === 0 && overallStatus === 'READY' && (
+          <span className="text-green-600 font-medium">✓ All Passed</span>
+        )}
+        {!isStale && staleCount === 0 && overallStatus !== 'READY' && (
+          <span className="text-amber-600 font-medium">✓ All Validated (review needed)</span>
+        )}
       </div>
     </div>
   );
@@ -1034,6 +1039,8 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   const canValidate = ['GENERATED', 'VALIDATION_FAILED', 'READY'].includes(test.status);
   const staleCount = validation?.staleQuestionIds?.length ?? 0;
   const allCurrent = validation !== null && staleCount === 0;
+  // allPassed = all questions validated AND every one is PASS (no FAIL/REVIEW)
+  const allPassed = allCurrent && validation?.overallStatus === 'READY';
   const canPublishNow = ['READY', 'SCHEDULED'].includes(test.status);
   const canSchedule = test.status === 'READY';
   const canCancelSchedule = test.status === 'SCHEDULED';
@@ -1077,10 +1084,18 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               <button
                 onClick={() => { void handleValidate(); }}
                 disabled={isOperationInProgress || allCurrent}
-                title={allCurrent ? 'All questions have current validation results — no AI call needed' : undefined}
+                title={
+                  allPassed
+                    ? 'All questions passed validation — no revalidation needed'
+                    : allCurrent
+                    ? 'All questions are validated (no stale versions) but some failed or need review. Fix those questions first, then revalidate.'
+                    : undefined
+                }
                 className={`text-sm font-semibold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${
-                  allCurrent
+                  allPassed
                     ? 'bg-green-100 text-green-700 border border-green-300 cursor-default'
+                    : allCurrent
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300 cursor-default'
                     : validation
                     ? 'bg-purple-600 hover:bg-purple-700 text-white'
                     : 'bg-brand-600 hover:bg-brand-700 text-white'
@@ -1088,8 +1103,10 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               >
                 {validating || test.status === 'VALIDATING'
                   ? 'Validating...'
+                  : allPassed
+                  ? '✓ All Questions Passed'
                   : allCurrent
-                  ? '✓ All Questions Current'
+                  ? '✓ All Questions Validated'
                   : !validation
                   ? '✓ Validate Test'
                   : staleCount > 0

@@ -18,11 +18,25 @@
 
 import { db } from '@/lib/db';
 import { runDeterministicValidation } from '@/lib/admin/deterministic-validator';
-import { runAIValidation, mergeValidationResults, type TopicScopeContext } from '@/lib/admin/ai-validator';
+import {
+  runAIValidation,
+  mergeValidationResults,
+  retryContradictedQuestion,
+  type TopicScopeContext,
+} from '@/lib/admin/ai-validator';
 import { computeStaleQuestions } from '@/lib/admin/validation-freshness';
-import { applyContradictionGuard } from '@/lib/admin/validator-consistency';
+import {
+  classifyContradiction,
+  isContradictoryFix,
+  buildResolvedPassResult,
+  buildAmbiguousReviewResult,
+} from '@/lib/admin/validator-consistency';
 import type { GeneratedQuestion } from '@/types/generated-test';
-import type { QuestionValidationInput, ValidationOverallStatus } from '@/types/validation';
+import type {
+  AIQuestionValidation,
+  QuestionValidationInput,
+  ValidationOverallStatus,
+} from '@/types/validation';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -49,6 +63,111 @@ export type ValidationError = {
 export type ValidationResult = ValidationSuccess | ValidationError;
 
 const VALIDATABLE_STATUSES = new Set(['GENERATED', 'VALIDATION_FAILED', 'READY']);
+
+// ─── Contradiction reconciliation ─────────────────────────────────────────────
+
+/**
+ * Resolve validator self-contradictions in a set of results.
+ *
+ * For each FAIL result that qualifies as a STRONG contradiction:
+ *   1. Run ONE focused AI retry with explicit contradiction context.
+ *   2a. Retry returns PASS         → accept as clean PASS.
+ *   2b. Retry is STILL contradictory → normalize to PASS with audit note.
+ *   2c. Retry returns FAIL/REVIEW with different coherent reasoning → keep it.
+ *   2d. Retry API call fails → fall back to REVIEW.
+ *
+ * For AMBIGUOUS contradictions (independent blocking issues also present):
+ *   → Downgrade FAIL→REVIEW (same as previous guard).
+ *
+ * SAFE guards — never auto-PASS when:
+ *   - TOPIC_SCOPE_FAIL, AMBIGUITY, NEAR_DUPLICATE, TRANSLATION_MISMATCH present
+ *   - factualNotes contradict the current answer
+ *   - suggestedFix does not clearly equal the current answer
+ */
+async function resolveContradictions(
+  results: QuestionValidationInput[],
+  questions: GeneratedQuestion[],
+  apiKey: string,
+  exam: string,
+  category: string,
+  topic: string,
+  difficulty: string,
+  scope: TopicScopeContext | null,
+  testId: string,
+): Promise<{ results: QuestionValidationInput[]; resolvedIds: string[]; retriedIds: string[] }> {
+  const questionMap = new Map<string, GeneratedQuestion>(
+    questions.map((q) => [q.id, q]),
+  );
+  const resolvedIds: string[] = [];
+  const retriedIds: string[] = [];
+  const finalResults: QuestionValidationInput[] = [];
+
+  for (const r of results) {
+    if (r.status !== 'FAIL' || !r.suggestedFix) {
+      finalResults.push(r);
+      continue;
+    }
+
+    const q = questionMap.get(r.questionId);
+    if (!q) { finalResults.push(r); continue; }
+
+    const cls = classifyContradiction(r, q);
+
+    if (cls === 'NONE') {
+      finalResults.push(r);
+      continue;
+    }
+
+    if (cls === 'AMBIGUOUS') {
+      finalResults.push(buildAmbiguousReviewResult(r));
+      continue;
+    }
+
+    // ── STRONG contradiction: run ONE focused retry ─────────────────────────
+    retriedIds.push(r.questionId);
+    console.log(`[VAL_SVC:${testId}] Strong self-contradiction for ${r.questionId} — running focused retry`);
+
+    let retryResult: AIQuestionValidation;
+    try {
+      retryResult = await retryContradictedQuestion(
+        apiKey, q, r, exam, category, topic, difficulty, scope,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[VAL_SVC:${testId}] Retry call failed for ${r.questionId}: ${msg}. Falling back to REVIEW.`);
+      finalResults.push(buildAmbiguousReviewResult(r));
+      continue;
+    }
+
+    if (retryResult.status === 'PASS') {
+      // Coherent PASS from retry → accept it
+      resolvedIds.push(r.questionId);
+      finalResults.push(buildResolvedPassResult(r, 'RETRY_PASS', retryResult.factualNotes));
+    } else if (
+      retryResult.status === 'FAIL' &&
+      retryResult.suggestedFix &&
+      isContradictoryFix(retryResult.suggestedFix, q.correctOption, q)
+    ) {
+      // Retry is ALSO a strong contradiction → normalize to PASS
+      resolvedIds.push(r.questionId);
+      console.log(`[VAL_SVC:${testId}] Retry still contradictory for ${r.questionId} — normalizing to PASS`);
+      finalResults.push(buildResolvedPassResult(r, 'NORMALIZED'));
+    } else {
+      // Retry returned coherent FAIL or REVIEW with different reasoning → respect it
+      finalResults.push({
+        questionId: r.questionId,
+        order: r.order,
+        status: retryResult.status,
+        confidence: retryResult.confidence,
+        issues: retryResult.issues as QuestionValidationInput['issues'],
+        suggestedFix: retryResult.suggestedFix,
+        factualNotes: retryResult.factualNotes,
+      });
+    }
+  }
+
+  return { results: finalResults, resolvedIds, retriedIds };
+}
 
 // ─── Shared types ─────────────────────────────────────────────────────────────
 
@@ -215,19 +334,30 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
       // Keep only stale/updated questions from merge
       newValidationResults = newValidationResults.filter((r) => aiCandidateIds.has(r.questionId));
 
-      // Contradiction guard: if AI says FAIL but suggestedFix endorses the current
-      // correct answer, downgrade FAIL→REVIEW. This prevents a self-contradictory AI
-      // response from permanently blocking a question that is likely correct.
-      const { results: guarded, downgradedIds } = applyContradictionGuard(
+      // Contradiction reconciliation:
+      // - STRONG contradictions (suggestedFix = current answer, no blocking issues):
+      //   run ONE focused AI retry; if retry PASS → PASS; if retry also contradicts → PASS;
+      //   if retry gives coherent different FAIL/REVIEW → keep it.
+      // - AMBIGUOUS contradictions (suggestedFix ≈ current answer + other issues present):
+      //   downgrade FAIL→REVIEW for admin inspection.
+      const { results: reconciled, resolvedIds, retriedIds } = await resolveContradictions(
         newValidationResults,
         test.questions as GeneratedQuestion[],
+        apiKey,
+        test.exam,
+        test.category,
+        test.topic,
+        test.difficulty,
+        scopeCtx,
+        testId,
       );
-      if (downgradedIds.length > 0) {
-        console.warn(
-          `[VAL_SVC:${testId}] Contradiction guard: downgraded FAIL→REVIEW for ${downgradedIds.length} question(s): ${downgradedIds.join(', ')}`,
-        );
+      if (retriedIds.length > 0) {
+        console.log(`[VAL_SVC:${testId}] Contradiction retry: ${retriedIds.length} question(s) retried`);
       }
-      newValidationResults = guarded;
+      if (resolvedIds.length > 0) {
+        console.log(`[VAL_SVC:${testId}] Contradiction resolved → PASS: ${resolvedIds.join(', ')}`);
+      }
+      newValidationResults = reconciled;
       aiModel = aiRun.model;
       aiSummary = aiRun.validationSummary;
     } catch (err) {

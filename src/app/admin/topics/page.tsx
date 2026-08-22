@@ -312,11 +312,15 @@ function NextTopicPanel({ exam, allowRepeat }: { exam: string; allowRepeat: bool
     if (!next) return;
     setUsingTopic(true);
     try {
-      await fetch('/api/admin/automation/config', {
+      const res = await fetch('/api/admin/automation/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topicMode: 'QUEUE' }),
       });
+      if (res.ok) {
+        // Re-fetch so the "Auto Select" badge reflects the persisted state.
+        await refresh();
+      }
     } finally { setUsingTopic(false); }
   }
 

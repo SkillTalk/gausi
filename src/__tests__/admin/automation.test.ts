@@ -147,6 +147,8 @@ import {
   istTimeToUTC,
   istMidnightUTC,
   isTopicRecentlyUsed,
+  upsertAutomationConfig,
+  getAutomationConfig,
 } from '@/lib/admin/automation.service';
 
 // ─── Utility tests ────────────────────────────────────────────────────────────
@@ -382,5 +384,68 @@ describe('runAutomation', () => {
     expect(result.status).toBe('FAILED');
     expect(result.message).toContain('OPENAI_API_KEY');
     process.env.OPENAI_API_KEY = 'sk-test-key';
+  });
+});
+
+// ─── upsertAutomationConfig — topicMode persistence regression ───────────────
+//
+// Root cause of the "Enable Queue Mode" bug:
+//   PUT /api/admin/automation/config was missing `topicMode` from its whitelist,
+//   so { topicMode: 'QUEUE' } was stripped before reaching upsertAutomationConfig.
+//   These tests verify the service layer correctly reads/writes topicMode so that
+//   adding it to the API whitelist is sufficient to fix the end-to-end flow.
+
+describe('upsertAutomationConfig — topicMode persistence', () => {
+  const mockConfigCreate = db.dailyAutomationConfig.create as MockedFunction<
+    typeof db.dailyAutomationConfig.create
+  >;
+
+  it('MANUAL → QUEUE: writes topicMode=QUEUE to the DB', async () => {
+    // Existing config in MANUAL mode
+    mockConfigFind.mockResolvedValue(makeConfig({ id: 'cfg-1' }) as never);
+    mockConfigUpdate.mockResolvedValue({ ...makeConfig({ id: 'cfg-1' }), topicMode: 'QUEUE' } as never);
+
+    await upsertAutomationConfig({ topicMode: 'QUEUE' });
+
+    expect(mockConfigUpdate).toHaveBeenCalledWith({
+      where: { id: 'cfg-1' },
+      data: { topicMode: 'QUEUE' },
+    });
+  });
+
+  it('QUEUE → MANUAL: writes topicMode=MANUAL to the DB', async () => {
+    mockConfigFind.mockResolvedValue({ ...makeConfig({ id: 'cfg-1' }), topicMode: 'QUEUE' } as never);
+    mockConfigUpdate.mockResolvedValue({ ...makeConfig({ id: 'cfg-1' }), topicMode: 'MANUAL' } as never);
+
+    await upsertAutomationConfig({ topicMode: 'MANUAL' });
+
+    expect(mockConfigUpdate).toHaveBeenCalledWith({
+      where: { id: 'cfg-1' },
+      data: { topicMode: 'MANUAL' },
+    });
+  });
+
+  it('config reload returns persisted topicMode=QUEUE', async () => {
+    // Simulate the DB returning a config whose topicMode was already set to QUEUE.
+    const persistedConfig = { ...makeConfig({ id: 'cfg-1' }), topicMode: 'QUEUE' };
+    mockConfigFind.mockResolvedValue(persistedConfig as never);
+
+    const cfg = await getAutomationConfig();
+
+    expect(cfg?.topicMode).toBe('QUEUE');
+  });
+
+  it('creates new config with topicMode=QUEUE when no config exists', async () => {
+    mockConfigFind.mockResolvedValue(null);
+    mockConfigCreate.mockResolvedValue({ ...makeConfig({ id: 'cfg-new' }), topicMode: 'QUEUE' } as never);
+
+    await upsertAutomationConfig({ topicMode: 'QUEUE' });
+
+    // create() should be called and topicMode should be included in data
+    expect(mockConfigCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ topicMode: 'QUEUE' }),
+      }),
+    );
   });
 });

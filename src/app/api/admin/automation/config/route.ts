@@ -42,6 +42,12 @@ export async function PUT(request: Request) {
     generateTime: typeof b.generateTime === 'string' ? b.generateTime.trim() : undefined,
     publishTime: typeof b.publishTime === 'string' ? b.publishTime.trim() : undefined,
     timezone: typeof b.timezone === 'string' ? b.timezone.trim() : undefined,
+    // topicMode was previously missing from this whitelist — that was the root cause
+    // of the "Enable Queue Mode" button having no effect (field was silently stripped).
+    topicMode:
+      typeof b.topicMode === 'string' && ['MANUAL', 'QUEUE'].includes(b.topicMode)
+        ? b.topicMode
+        : undefined,
   };
 
   // Strip undefined

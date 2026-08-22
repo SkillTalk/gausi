@@ -68,7 +68,7 @@ export type RepairSuccess = {
 export type RepairFailure = {
   ok: false;
   error: string;
-  stage: 'LOAD' | 'STATUS_CHECK' | 'AI_CALL' | 'STRUCT_CHECK' | 'DB_WRITE';
+  stage: 'LOAD' | 'STATUS_CHECK' | 'AI_CALL' | 'STRUCT_CHECK' | 'DB_WRITE' | 'MANUAL_PARSE';
 };
 
 export type RepairResult = RepairSuccess | RepairFailure;
@@ -282,7 +282,130 @@ export async function repairQuestion(
     adminInstruction: adminInstruction ?? null,
   };
 
-  // ── 7. Call OpenAI ────────────────────────────────────────────────────────
+  // ── 7. MANUAL mode: parse adminInstruction as JSON, skip AI ─────────────
+  if (repairMode === 'MANUAL') {
+    if (!adminInstruction || !adminInstruction.trim()) {
+      return {
+        ok: false,
+        error: 'MANUAL mode requires adminInstruction containing the full replacement question as JSON.',
+        stage: 'MANUAL_PARSE',
+      };
+    }
+    let manualData: Record<string, unknown>;
+    try {
+      manualData = JSON.parse(adminInstruction) as Record<string, unknown>;
+    } catch {
+      return {
+        ok: false,
+        error: 'MANUAL mode: adminInstruction must be valid JSON with all question fields.',
+        stage: 'MANUAL_PARSE',
+      };
+    }
+
+    const manualCheck = validateRepairedQuestion(manualData, existingTexts);
+    if (!manualCheck.valid) {
+      return {
+        ok: false,
+        error: `MANUAL question failed structural validation: ${manualCheck.errors.join('; ')}`,
+        stage: 'STRUCT_CHECK',
+      };
+    }
+
+    const rawQTypeM = typeof manualData.questionType === 'string' ? manualData.questionType.trim() : '';
+    const repairedManual: RepairedQuestionData = {
+      questionType: VALID_QUESTION_TYPES.has(rawQTypeM) ? rawQTypeM : (targetQuestion.questionType ?? 'DIRECT'),
+      questionHi: (manualData.questionHi as string).trim(),
+      questionEn: (manualData.questionEn as string).trim(),
+      optionAHi: (manualData.optionAHi as string).trim(),
+      optionBHi: (manualData.optionBHi as string).trim(),
+      optionCHi: (manualData.optionCHi as string).trim(),
+      optionDHi: (manualData.optionDHi as string).trim(),
+      optionAEn: (manualData.optionAEn as string).trim(),
+      optionBEn: (manualData.optionBEn as string).trim(),
+      optionCEn: (manualData.optionCEn as string).trim(),
+      optionDEn: (manualData.optionDEn as string).trim(),
+      explanationHi: (manualData.explanationHi as string).trim(),
+      explanationEn: (manualData.explanationEn as string).trim(),
+      correctOption: (manualData.correctOption as string).trim().toUpperCase(),
+    };
+
+    // Persist manual repair
+    try {
+      const previousSnapshot = {
+        id: targetQuestion.id,
+        order: targetQuestion.order,
+        category: targetQuestion.category,
+        topic: targetQuestion.topic,
+        difficulty: targetQuestion.difficulty,
+        questionHi: targetQuestion.questionHi,
+        questionEn: targetQuestion.questionEn,
+        optionAHi: targetQuestion.optionAHi,
+        optionBHi: targetQuestion.optionBHi,
+        optionCHi: targetQuestion.optionCHi,
+        optionDHi: targetQuestion.optionDHi,
+        optionEHi: targetQuestion.optionEHi,
+        optionAEn: targetQuestion.optionAEn,
+        optionBEn: targetQuestion.optionBEn,
+        optionCEn: targetQuestion.optionCEn,
+        optionDEn: targetQuestion.optionDEn,
+        optionEEn: targetQuestion.optionEEn,
+        explanationHi: targetQuestion.explanationHi,
+        explanationEn: targetQuestion.explanationEn,
+        correctOption: targetQuestion.correctOption,
+      };
+
+      const repairLog = await db.questionRepairLog.create({
+        data: {
+          testId,
+          questionId,
+          repairMode: 'MANUAL',
+          previousSnapshot,
+          repairedSnapshot: { ...previousSnapshot, ...repairedManual, optionEHi: OPTION_E_HI, optionEEn: OPTION_E_EN },
+          validatorIssue: valIssues.map((i) => `[${i.type}] ${i.message}`).join('\n') || null,
+          suggestedFix,
+          adminInstruction: '(MANUAL mode — full JSON provided)',
+          model: 'MANUAL',
+        },
+      });
+
+      await db.generatedQuestion.update({
+        where: { id: questionId },
+        data: {
+          questionType: repairedManual.questionType,
+          questionHi: repairedManual.questionHi,
+          questionEn: repairedManual.questionEn,
+          optionAHi: repairedManual.optionAHi,
+          optionBHi: repairedManual.optionBHi,
+          optionCHi: repairedManual.optionCHi,
+          optionDHi: repairedManual.optionDHi,
+          optionEHi: OPTION_E_HI,
+          optionAEn: repairedManual.optionAEn,
+          optionBEn: repairedManual.optionBEn,
+          optionCEn: repairedManual.optionCEn,
+          optionDEn: repairedManual.optionDEn,
+          optionEEn: OPTION_E_EN,
+          explanationHi: repairedManual.explanationHi,
+          explanationEn: repairedManual.explanationEn,
+          correctOption: repairedManual.correctOption,
+        },
+      });
+
+      await db.generatedTest.update({
+        where: { id: testId },
+        data: {
+          contentVersion: { increment: 1 },
+          status: 'GENERATED',
+        },
+      });
+
+      return { ok: true, questionId, repairLogId: repairLog.id, repairedQuestion: repairedManual };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'DB write failed';
+      return { ok: false, error: `Failed to save MANUAL repair: ${msg}`, stage: 'DB_WRITE' };
+    }
+  }
+
+  // ── 8. Call OpenAI (AUTO_FIX / REPLACE) ──────────────────────────────────
   let rawAI: Record<string, unknown>;
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -321,7 +444,7 @@ export async function repairQuestion(
     return { ok: false, error: `Repair AI call failed: ${msg}`, stage: 'AI_CALL' };
   }
 
-  // ── 8. Structural validation ───────────────────────────────────────────────
+  // ── 9. Structural validation ───────────────────────────────────────────────
   const structCheck = validateRepairedQuestion(rawAI, existingTexts);
   if (!structCheck.valid) {
     return {
@@ -350,7 +473,7 @@ export async function repairQuestion(
     correctOption: (rawAI.correctOption as string).trim().toUpperCase(),
   };
 
-  // ── 9. Persist: audit log + question update + contentVersion ─────────────
+  // ── 10. Persist: audit log + question update + contentVersion ────────────
   try {
     // 9a. Audit log — snapshot before and after
     const previousSnapshot = {

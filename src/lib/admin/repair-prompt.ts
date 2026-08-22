@@ -12,7 +12,12 @@
 
 import type { ValidationIssue } from '@/types/validation';
 
-export type RepairMode = 'AUTO_FIX' | 'REPLACE';
+/**
+ * MANUAL: admin provides the full replacement question as JSON in adminInstruction.
+ * No AI call is made. Data is validated deterministically and saved directly.
+ * Useful when the AI repair consistently misinterprets or regenerates the wrong type.
+ */
+export type RepairMode = 'AUTO_FIX' | 'REPLACE' | 'MANUAL';
 
 export type RepairPromptContext = {
   exam: string;

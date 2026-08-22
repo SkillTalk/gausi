@@ -5,7 +5,7 @@
  * Protected by Next.js middleware (admin session cookie required).
  *
  * Request body:
- *   { repairMode: "AUTO_FIX" | "REPLACE", instruction?: string }
+ *   { repairMode: "AUTO_FIX" | "REPLACE" | "MANUAL", instruction?: string }
  *
  * Response 200:
  *   { questionId, repairLogId, repairedQuestion, message }
@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { repairQuestion, type RepairMode } from '@/lib/admin/repair.service';
 
-const VALID_REPAIR_MODES: RepairMode[] = ['AUTO_FIX', 'REPLACE'];
+const VALID_REPAIR_MODES: RepairMode[] = ['AUTO_FIX', 'REPLACE', 'MANUAL'];
 
 type Params = { params: Promise<{ testId: string; questionId: string }> };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { GeneratedTestWithQuestions, GeneratedQuestion } from '@/types/generated-test';
 import type { StoredTestValidation, StoredQuestionValidation, ValidationIssue } from '@/types/validation';
@@ -138,15 +138,10 @@ function RepairModal({
   }
 
   return (
-    /* Overlay */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
-        <div className="flex items-start justify-between">
-          <h2 className="text-base font-extrabold text-slate-900">Fix / Regenerate Question</h2>
+    <div className="border-t-2 border-amber-300 mt-4 pt-4 space-y-4">
+      <div className="">
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-sm font-extrabold text-slate-900">🔧 Fix / Regenerate Question</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 
@@ -293,7 +288,7 @@ function RepairModal({
   );
 }
 
-// ─── Answer Override Modal ────────────────────────────────────────────────────
+// ─── Answer Override Panel ───────────────────────────────────────────────────
 
 type AnswerOverrideModalProps = {
   testId: string;
@@ -353,14 +348,10 @@ function AnswerOverrideModal({ testId, question, onClose, onOverridden }: Answer
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4">
-        <div className="flex items-start justify-between">
-          <h2 className="text-base font-extrabold text-slate-900">Edit Correct Answer</h2>
+    <div className="border-t-2 border-violet-300 mt-4 pt-4 space-y-4">
+      <div>
+        <div className="flex items-start justify-between mb-4">
+          <h2 className="text-sm font-extrabold text-slate-900">🛡 Edit Correct Answer</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
 
@@ -488,41 +479,72 @@ function QuestionCard({
   index,
   qVal,
   needsRevalidation,
-  onRepair,
-  onOverrideAnswer,
   isPublished,
+  testId,
+  activeActionType,
+  onActivate,
+  onDeactivate,
+  onRepairSuccess,
+  onOverrideSuccess,
+  strictTopicScope,
+  excludeScope,
+  topicAdherenceMode,
 }: {
   q: GeneratedQuestion;
   index: number;
   qVal?: StoredQuestionValidation;
-  /**
-   * True when this question's questionVersion differs from QVR.questionVersion.
-   * When true, show "Needs Revalidation" badge and suppress stale issue details.
-   */
+  /** True when this question's questionVersion differs from QVR.questionVersion. */
   needsRevalidation: boolean;
-  onRepair?: (q: GeneratedQuestion, qv: StoredQuestionValidation) => void;
-  onOverrideAnswer?: (q: GeneratedQuestion) => void;
   isPublished: boolean;
+  testId: string;
+  activeActionType: 'repair' | 'override' | null;
+  onActivate: (type: 'repair' | 'override') => void;
+  onDeactivate: () => void;
+  onRepairSuccess: () => void;
+  onOverrideSuccess: (opt: string, warn: boolean) => void;
+  strictTopicScope?: string | null;
+  excludeScope?: string | null;
+  topicAdherenceMode?: string | null;
 }) {
   const [showDetails, setShowDetails] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the card into view (nearest) when its inline panel opens.
+  useEffect(() => {
+    if (activeActionType && cardRef.current) {
+      cardRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [activeActionType]);
+
+  // ESC key closes the active panel (safe to call while API is idle).
+  useEffect(() => {
+    if (!activeActionType) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onDeactivate();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [activeActionType, onDeactivate]);
 
   const hasIssues = !needsRevalidation && qVal && (qVal.issues as ValidationIssue[]).length > 0;
-  // Allow repair if: already repaired (needsRevalidation) OR validation marks as repairable.
-  // isRepairableValidationResult() covers FAIL, REVIEW, and TOPIC_SCOPE_FAIL / DUPLICATE_QUESTION
-  // even when the AI incorrectly marks the overall status as PASS.
   const canRepair = !isPublished && (
     needsRevalidation ||
     (qVal != null && isRepairableValidationResult(qVal))
   );
 
   return (
-    <div className={`bg-white border rounded-xl p-5 space-y-4 ${
-      needsRevalidation         ? 'border-cyan-300' :
-      qVal?.status === 'FAIL'   ? 'border-red-300' :
-      qVal?.status === 'REVIEW' ? 'border-amber-300' :
-      qVal?.status === 'PASS'   ? 'border-green-200' :
-      'border-slate-200'
-    }`}>
+    <div
+      ref={cardRef}
+      className={`bg-white border rounded-xl p-5 space-y-4 transition-shadow ${
+        activeActionType === 'repair'   ? 'border-amber-400 ring-2 ring-amber-200' :
+        activeActionType === 'override' ? 'border-violet-400 ring-2 ring-violet-200' :
+        needsRevalidation               ? 'border-cyan-300' :
+        qVal?.status === 'FAIL'         ? 'border-red-300' :
+        qVal?.status === 'REVIEW'       ? 'border-amber-300' :
+        qVal?.status === 'PASS'         ? 'border-green-200' :
+        'border-slate-200'
+      }`}
+    >
       {/* Question header */}
       <div className="flex items-start gap-3">
         <span className="shrink-0 h-7 w-7 bg-brand-100 text-brand-700 rounded-full flex items-center justify-center text-xs font-extrabold">
@@ -564,10 +586,10 @@ function QuestionCard({
         <p className="text-xs font-semibold text-slate-500 mb-0.5">Explanation</p>
         <p className="text-sm text-slate-700">{q.explanationHi}</p>
         <p className="text-xs text-slate-500 mt-0.5">{q.explanationEn}</p>
-        {/* Edit Correct Answer for PASS questions (always shown for non-published) */}
-        {!isPublished && qVal?.status === 'PASS' && !needsRevalidation && onOverrideAnswer && (
+        {/* Edit Correct Answer — shown for PASS questions not already in override mode */}
+        {!isPublished && qVal?.status === 'PASS' && !needsRevalidation && activeActionType !== 'repair' && (
           <button
-            onClick={() => onOverrideAnswer(q)}
+            onClick={() => onActivate('override')}
             className="mt-2 text-xs font-semibold px-3 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 transition-colors"
           >
             🛡 Edit Correct Answer
@@ -588,10 +610,9 @@ function QuestionCard({
                   Click <strong>Revalidate Test</strong> above to get fresh results.
                 </span>
               </div>
-              {/* Allow re-repair while waiting for revalidation */}
-              {canRepair && onRepair && qVal && (
+              {canRepair && qVal && (
                 <button
-                  onClick={() => onRepair(q, qVal)}
+                  onClick={() => onActivate('repair')}
                   className="text-xs font-bold px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
                 >
                   🔧 Repair Again
@@ -614,19 +635,17 @@ function QuestionCard({
                   )}
                 </button>
 
-                {/* Repair button */}
-                {canRepair && onRepair && qVal && (
+                {canRepair && qVal && (
                   <button
-                    onClick={() => onRepair(q, qVal)}
+                    onClick={() => onActivate('repair')}
                     className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
                   >
                     🔧 Fix / Regenerate Question
                   </button>
                 )}
-                {/* Edit Correct Answer — available for non-published questions regardless of validation */}
-                {!isPublished && onOverrideAnswer && (
+                {!isPublished && (
                   <button
-                    onClick={() => onOverrideAnswer(q)}
+                    onClick={() => onActivate('override')}
                     className="text-xs font-bold px-3 py-1.5 rounded-lg bg-violet-500 hover:bg-violet-600 text-white transition-colors"
                   >
                     🛡 Edit Correct Answer
@@ -657,6 +676,30 @@ function QuestionCard({
             </>
           )}
         </div>
+      )}
+
+      {/* ── Inline Repair Panel ─────────────────────────────────────────────── */}
+      {activeActionType === 'repair' && qVal && (
+        <RepairModal
+          testId={testId}
+          question={q}
+          qVal={qVal}
+          strictTopicScope={strictTopicScope}
+          excludeScope={excludeScope}
+          topicAdherenceMode={topicAdherenceMode}
+          onClose={onDeactivate}
+          onRepaired={onRepairSuccess}
+        />
+      )}
+
+      {/* ── Inline Answer Override Panel ────────────────────────────────────── */}
+      {activeActionType === 'override' && (
+        <AnswerOverrideModal
+          testId={testId}
+          question={q}
+          onClose={onDeactivate}
+          onOverridden={onOverrideSuccess}
+        />
       )}
     </div>
   );
@@ -762,13 +805,10 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [publishMsg, setPublishMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // ── Repair state ────────────────────────────────────────────────────────────
-  type RepairTarget = { question: GeneratedQuestion; qVal: StoredQuestionValidation };
-  const [repairTarget, setRepairTarget] = useState<RepairTarget | null>(null);
+  // ── Active inline question action (one at a time) ────────────────────────────
+  type ActiveAction = { questionId: string; type: 'repair' | 'override' };
+  const [activeAction, setActiveAction] = useState<ActiveAction | null>(null);
   const [repairBanner, setRepairBanner] = useState<string | null>(null);
-
-  // ── Answer Override state ────────────────────────────────────────────────────
-  const [overrideTarget, setOverrideTarget] = useState<GeneratedQuestion | null>(null);
   const [overrideBanner, setOverrideBanner] = useState<string | null>(null);
 
   // Build a lookup map: questionId → validation result
@@ -960,13 +1000,13 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   }
 
   async function handleRepairSuccess() {
-    setRepairTarget(null);
+    setActiveAction(null);
     setRepairBanner('Question repaired. Revalidation required before publishing.');
     await Promise.all([reloadTest(), reloadValidation()]);
   }
 
   async function handleOverrideSuccess(newCorrectOption: string, explanationWarning: boolean) {
-    setOverrideTarget(null);
+    setActiveAction(null);
     const baseMsg = `Correct answer changed to Option ${newCorrectOption}. Admin override recorded.`;
     const warnMsg = explanationWarning
       ? ' ⚠ The explanation may reference the old answer — review it before publishing.'
@@ -1307,36 +1347,19 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               qVal={valByQuestionId.get(q.id)}
               needsRevalidation={staleSet.has(q.id)}
               isPublished={isPublished}
-              onRepair={(question, qv) => setRepairTarget({ question, qVal: qv })}
-              onOverrideAnswer={(question) => setOverrideTarget(question)}
+              testId={testId}
+              activeActionType={activeAction?.questionId === q.id ? activeAction.type : null}
+              onActivate={(type) => setActiveAction({ questionId: q.id, type })}
+              onDeactivate={() => setActiveAction(null)}
+              onRepairSuccess={() => { void handleRepairSuccess(); }}
+              onOverrideSuccess={(opt, warn) => { void handleOverrideSuccess(opt, warn); }}
+              strictTopicScope={(test as GeneratedTestWithQuestions & { strictTopicScope?: string | null }).strictTopicScope}
+              excludeScope={(test as GeneratedTestWithQuestions & { excludeScope?: string | null }).excludeScope}
+              topicAdherenceMode={(test as GeneratedTestWithQuestions & { topicAdherenceMode?: string | null }).topicAdherenceMode}
             />
           ))}
         </div>
       </div>
-
-      {/* ── Repair Modal ─────────────────────────────────────────────────── */}
-      {repairTarget && (
-        <RepairModal
-          testId={testId}
-          question={repairTarget.question}
-          qVal={repairTarget.qVal}
-          strictTopicScope={(test as GeneratedTestWithQuestions & { strictTopicScope?: string | null }).strictTopicScope}
-          excludeScope={(test as GeneratedTestWithQuestions & { excludeScope?: string | null }).excludeScope}
-          topicAdherenceMode={(test as GeneratedTestWithQuestions & { topicAdherenceMode?: string | null }).topicAdherenceMode}
-          onClose={() => setRepairTarget(null)}
-          onRepaired={() => { void handleRepairSuccess(); }}
-        />
-      )}
-
-      {/* ── Answer Override Modal ─────────────────────────────────────────── */}
-      {overrideTarget && (
-        <AnswerOverrideModal
-          testId={testId}
-          question={overrideTarget}
-          onClose={() => setOverrideTarget(null)}
-          onOverridden={(newOpt, warnExp) => { void handleOverrideSuccess(newOpt, warnExp); }}
-        />
-      )}
     </div>
   );
 }

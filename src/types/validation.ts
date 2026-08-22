@@ -54,6 +54,8 @@ export type StoredQuestionValidation = {
 export type StoredTestValidation = {
   id: string;
   testId: string;
+  /** Snapshot of GeneratedTest.contentVersion at the time of validation. */
+  contentVersion: number;
   totalQuestions: number;
   passed: number;
   failed: number;
@@ -64,6 +66,18 @@ export type StoredTestValidation = {
   validationMs: number | null;
   validatedAt: string;
   questionResults: StoredQuestionValidation[];
+  /**
+   * Derived at API time (not stored in DB).
+   * True when GeneratedTest.contentVersion > TestValidation.contentVersion,
+   * i.e. at least one question has been repaired since this validation ran.
+   */
+  isStale?: boolean;
+  /**
+   * Derived at API time (not stored in DB).
+   * questionIds repaired after this validation's validatedAt timestamp.
+   * These questions should show "Needs Revalidation" instead of old PASS/FAIL/REVIEW.
+   */
+  repairedQuestionIds?: string[];
 };
 
 // AI validator response shape (structured JSON from OpenAI)

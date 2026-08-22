@@ -32,16 +32,22 @@ function StatusBadge({ status }: { status: string }) {
 // ─── Validation question badge ────────────────────────────────────────────────
 
 const QVAL_STYLES: Record<string, string> = {
-  PASS:   'bg-green-100 text-green-700 border-green-200',
-  FAIL:   'bg-red-100 text-red-700 border-red-200',
-  REVIEW: 'bg-amber-100 text-amber-700 border-amber-200',
+  PASS:               'bg-green-100 text-green-700 border-green-200',
+  FAIL:               'bg-red-100 text-red-700 border-red-200',
+  REVIEW:             'bg-amber-100 text-amber-700 border-amber-200',
+  NEEDS_REVALIDATION: 'bg-cyan-100 text-cyan-700 border-cyan-200',
 };
 
 function QuestionValidationBadge({ status }: { status: string }) {
-  const icon = status === 'PASS' ? '✓' : status === 'FAIL' ? '✗' : '⚑';
+  const icon =
+    status === 'PASS'               ? '✓' :
+    status === 'FAIL'               ? '✗' :
+    status === 'NEEDS_REVALIDATION' ? '⟳' : '⚑';
+  const label =
+    status === 'NEEDS_REVALIDATION' ? 'Needs Revalidation' : status;
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold ${QVAL_STYLES[status] ?? ''}`}>
-      {icon} {status}
+      {icon} {label}
     </span>
   );
 }
@@ -236,22 +242,33 @@ function QuestionCard({
   q,
   index,
   qVal,
+  needsRevalidation,
   onRepair,
   isPublished,
 }: {
   q: GeneratedQuestion;
   index: number;
   qVal?: StoredQuestionValidation;
+  /**
+   * True when this question was repaired after the current TestValidation snapshot.
+   * When true, show "Needs Revalidation" badge and suppress stale issue details.
+   */
+  needsRevalidation: boolean;
   onRepair?: (q: GeneratedQuestion, qv: StoredQuestionValidation) => void;
   isPublished: boolean;
 }) {
   const [showDetails, setShowDetails] = useState(false);
 
-  const hasIssues = qVal && (qVal.issues as ValidationIssue[]).length > 0;
-  const canRepair = !isPublished && qVal && (qVal.status === 'FAIL' || qVal.status === 'REVIEW');
+  const hasIssues = !needsRevalidation && qVal && (qVal.issues as ValidationIssue[]).length > 0;
+  // Allow re-repair if already repaired (needsRevalidation) OR if old val shows FAIL/REVIEW
+  const canRepair = !isPublished && (
+    needsRevalidation ||
+    (qVal && (qVal.status === 'FAIL' || qVal.status === 'REVIEW'))
+  );
 
   return (
     <div className={`bg-white border rounded-xl p-5 space-y-4 ${
+      needsRevalidation         ? 'border-cyan-300' :
       qVal?.status === 'FAIL'   ? 'border-red-300' :
       qVal?.status === 'REVIEW' ? 'border-amber-300' :
       qVal?.status === 'PASS'   ? 'border-green-200' :
@@ -267,7 +284,12 @@ function QuestionCard({
           <div className="text-xs text-slate-500 mt-1 leading-relaxed">{q.questionEn}</div>
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1">
-          {qVal && <QuestionValidationBadge status={qVal.status} />}
+          {needsRevalidation
+            ? <QuestionValidationBadge status="NEEDS_REVALIDATION" />
+            : qVal
+            ? <QuestionValidationBadge status={qVal.status} />
+            : null
+          }
           <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{q.category}</span>
           <span className="text-xs text-slate-400">{q.difficulty}</span>
         </div>
@@ -289,52 +311,77 @@ function QuestionCard({
         <p className="text-xs text-slate-500 mt-0.5">{q.explanationEn}</p>
       </div>
 
-      {/* Validation details (only for FAIL / REVIEW) */}
-      {qVal && qVal.status !== 'PASS' && (
+      {/* Validation details — only for FAIL/REVIEW AND only when the result is fresh */}
+      {(needsRevalidation || (qVal && qVal.status !== 'PASS')) && (
         <div className="pl-10 pt-2 border-t border-slate-100 space-y-2">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <button
-              onClick={() => setShowDetails((p) => !p)}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
-            >
-              {showDetails ? '▲' : '▼'} Validation details
-              {hasIssues && (
-                <span className="ml-1 text-xs text-slate-400">
-                  ({(qVal.issues as ValidationIssue[]).length} issue{(qVal.issues as ValidationIssue[]).length > 1 ? 's' : ''})
+          {needsRevalidation ? (
+            /* ── Repaired question: suppress stale issues, show revalidation prompt ── */
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 text-xs text-cyan-700">
+                <span className="text-base">⟳</span>
+                <span>
+                  This question was repaired. Stale validation details are hidden.
+                  Click <strong>Revalidate Test</strong> above to get fresh results.
                 </span>
-              )}
-            </button>
-
-            {/* ── Repair button (FAIL / REVIEW only, not on PUBLISHED tests) ── */}
-            {canRepair && onRepair && (
-              <button
-                onClick={() => onRepair(q, qVal)}
-                className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
-              >
-                🔧 Fix / Regenerate Question
-              </button>
-            )}
-          </div>
-
-          {showDetails && (
-            <div className="space-y-1.5">
-              {(qVal.issues as ValidationIssue[]).map((issue, i) => (
-                <IssueRow key={i} issue={issue} />
-              ))}
-              {qVal.suggestedFix && (
-                <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1.5">
-                  <span className="font-semibold">Suggested fix:</span> {qVal.suggestedFix}
-                </div>
-              )}
-              {qVal.factualNotes && (
-                <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1.5">
-                  <span className="font-semibold">Factual notes:</span> {qVal.factualNotes}
-                </div>
-              )}
-              <div className="text-xs text-slate-400">
-                Confidence: {Math.round(qVal.confidence * 100)}%
               </div>
+              {/* Allow re-repair while waiting for revalidation */}
+              {canRepair && onRepair && qVal && (
+                <button
+                  onClick={() => onRepair(q, qVal)}
+                  className="text-xs font-bold px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white transition-colors"
+                >
+                  🔧 Repair Again
+                </button>
+              )}
             </div>
+          ) : (
+            /* ── Fresh FAIL/REVIEW: show full details + repair button ── */
+            <>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <button
+                  onClick={() => setShowDetails((p) => !p)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                >
+                  {showDetails ? '▲' : '▼'} Validation details
+                  {hasIssues && qVal && (
+                    <span className="ml-1 text-xs text-slate-400">
+                      ({(qVal.issues as ValidationIssue[]).length} issue{(qVal.issues as ValidationIssue[]).length > 1 ? 's' : ''})
+                    </span>
+                  )}
+                </button>
+
+                {/* Repair button */}
+                {canRepair && onRepair && qVal && (
+                  <button
+                    onClick={() => onRepair(q, qVal)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors"
+                  >
+                    🔧 Fix / Regenerate Question
+                  </button>
+                )}
+              </div>
+
+              {showDetails && qVal && (
+                <div className="space-y-1.5">
+                  {(qVal.issues as ValidationIssue[]).map((issue, i) => (
+                    <IssueRow key={i} issue={issue} />
+                  ))}
+                  {qVal.suggestedFix && (
+                    <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1.5">
+                      <span className="font-semibold">Suggested fix:</span> {qVal.suggestedFix}
+                    </div>
+                  )}
+                  {qVal.factualNotes && (
+                    <div className="text-xs text-slate-600 bg-slate-50 rounded px-2 py-1.5">
+                      <span className="font-semibold">Factual notes:</span> {qVal.factualNotes}
+                    </div>
+                  )}
+                  <div className="text-xs text-slate-400">
+                    Confidence: {Math.round(qVal.confidence * 100)}%
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -345,19 +392,46 @@ function QuestionCard({
 // ─── Validation summary panel ─────────────────────────────────────────────────
 
 function ValidationSummaryPanel({ validation }: { validation: StoredTestValidation }) {
-  const { passed, failed, reviewNeeded, totalQuestions, overallStatus, validationSummary, validatorModel, validationMs, validatedAt } = validation;
+  const {
+    passed, failed, reviewNeeded, totalQuestions, overallStatus,
+    validationSummary, validatorModel, validationMs, validatedAt,
+    isStale, repairedQuestionIds,
+  } = validation;
+
+  const repairedCount = repairedQuestionIds?.length ?? 0;
 
   return (
-    <div className={`rounded-xl border p-5 ${
+    <div className={`rounded-xl border p-5 space-y-3 ${
+      isStale ? 'bg-slate-50 border-slate-300' :
       overallStatus === 'READY' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
     }`}>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className={`text-base font-bold ${overallStatus === 'READY' ? 'text-green-800' : 'text-red-700'}`}>
-          {overallStatus === 'READY' ? '✅ Validation Passed — READY' : '❌ Validation Failed'}
+      {/* Stale banner */}
+      {isStale && (
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5">
+          <span className="text-amber-600 shrink-0">⚠</span>
+          <div className="text-xs text-amber-800">
+            <span className="font-bold">Validation is from a previous version.</span>
+            {repairedCount > 0
+              ? ` ${repairedCount} question${repairedCount > 1 ? 's were' : ' was'} repaired since this snapshot. Repaired question${repairedCount > 1 ? 's show' : ' shows'} "Needs Revalidation" below.`
+              : ' Revalidate to refresh results.'}
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between">
+        <h3 className={`text-base font-bold ${
+          isStale ? 'text-slate-500' :
+          overallStatus === 'READY' ? 'text-green-800' : 'text-red-700'
+        }`}>
+          {isStale
+            ? '⏳ Previous Validation Snapshot'
+            : overallStatus === 'READY'
+            ? '✅ Validation Passed — READY'
+            : '❌ Validation Failed'}
         </h3>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-3 gap-3">
         <div className="bg-white/70 rounded-lg p-3 text-center">
           <div className="text-lg font-extrabold text-green-700">{passed}</div>
           <div className="text-xs text-slate-500">Passed</div>
@@ -373,7 +447,7 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
       </div>
 
       {validationSummary && (
-        <p className="text-sm text-slate-700 mb-2">{validationSummary}</p>
+        <p className="text-sm text-slate-700">{validationSummary}</p>
       )}
 
       <div className="text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1">
@@ -381,6 +455,7 @@ function ValidationSummaryPanel({ validation }: { validation: StoredTestValidati
         {validationMs && <span>Duration: {(validationMs / 1000).toFixed(1)}s</span>}
         <span>Validated: {new Date(validatedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</span>
         <span>Total: {totalQuestions}Q</span>
+        {isStale && <span className="text-amber-500 font-medium">(snapshot — stale)</span>}
       </div>
     </div>
   );
@@ -420,6 +495,9 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
       valByQuestionId.set(qv.questionId, qv);
     }
   }
+
+  // Build a set of repaired questionIds (empty when validation is fresh)
+  const repairedSet = new Set<string>(validation?.repairedQuestionIds ?? []);
 
   const reloadTest = useCallback(() => {
     return fetch(`/api/admin/tests/${testId}`)
@@ -888,6 +966,7 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               q={q}
               index={i}
               qVal={valByQuestionId.get(q.id)}
+              needsRevalidation={repairedSet.has(q.id)}
               isPublished={isPublished}
               onRepair={(question, qv) => setRepairTarget({ question, qVal: qv })}
             />

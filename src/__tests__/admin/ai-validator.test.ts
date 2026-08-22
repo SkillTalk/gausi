@@ -90,7 +90,7 @@ describe('mergeValidationResults', () => {
 
     const merged = mergeValidationResults(
       [detResult],
-      new Map([[1, aiResult]]),
+      new Map([['q1', aiResult]]),
       new Set(), // empty — q1 is NOT in cleanQuestionIds
     );
 
@@ -114,7 +114,7 @@ describe('mergeValidationResults', () => {
 
     const merged = mergeValidationResults(
       [detResult],
-      new Map([[1, aiResult]]),
+      new Map([['q1', aiResult]]),
       new Set(['q1']),
     );
 
@@ -139,7 +139,7 @@ describe('mergeValidationResults', () => {
 
     const merged = mergeValidationResults(
       [detResult],
-      new Map([[1, aiResult]]),
+      new Map([['q1', aiResult]]),
       new Set(['q1']),
     );
 
@@ -172,7 +172,7 @@ describe('mergeValidationResults', () => {
 
     const merged = mergeValidationResults(
       [detResult],
-      new Map([[1, aiResult]]),
+      new Map([['q1', aiResult]]),
       new Set(['q1']),
     );
 
@@ -195,7 +195,7 @@ describe('mergeValidationResults', () => {
 
     const merged = mergeValidationResults(
       [detResult],
-      new Map([[1, aiResult]]),
+      new Map([['q1', aiResult]]),
       new Set(['q1']),
     );
 
@@ -226,9 +226,9 @@ describe('mergeValidationResults', () => {
     const det2 = makeDeterministicPass(q2);
     const det3 = makeDeterministicPass(q3);
 
-    const aiResults = new Map<number, AIQuestionValidation>([
-      [2, { order: 2, status: 'REVIEW', confidence: 0.6, issues: [{ type: 'NEAR_DUPLICATE', message: 'Similar to Q3', severity: 'WARNING' }], suggestedFix: null, factualNotes: null }],
-      [3, { order: 3, status: 'PASS', confidence: 0.95, issues: [], suggestedFix: null, factualNotes: null }],
+    const aiResults = new Map<string, AIQuestionValidation>([
+      ['q2', { order: 2, status: 'REVIEW', confidence: 0.6, issues: [{ type: 'NEAR_DUPLICATE', message: 'Similar to Q3', severity: 'WARNING' }], suggestedFix: null, factualNotes: null }],
+      ['q3', { order: 3, status: 'PASS', confidence: 0.95, issues: [], suggestedFix: null, factualNotes: null }],
     ]);
 
     const merged = mergeValidationResults(
@@ -342,7 +342,8 @@ describe('AI validator — mocked fetch', () => {
     expect(body.temperature).toBe(0.1);
 
     expect(result.overallStatus).toBe('READY');
-    expect(result.questionResults.get(1)?.status).toBe('PASS');
+    // Map is now keyed by questionId (string), not by order integer
+    expect(result.questionResults.get('q1')?.status).toBe('PASS');
   });
 
   it('runAIValidation returns VALIDATION_FAILED when AI flags issues', async () => {
@@ -372,8 +373,8 @@ describe('AI validator — mocked fetch', () => {
     const result = await runAIValidation('test-key', [q], 'BPSC TRE 4', 'History', 'Revolt of 1857', 'Moderate');
 
     expect(result.overallStatus).toBe('VALIDATION_FAILED');
-    expect(result.questionResults.get(1)?.status).toBe('FAIL');
-    expect(result.questionResults.get(1)?.issues[0].type).toBe('FACTUAL_ERROR');
+    expect(result.questionResults.get('q1')?.status).toBe('FAIL');
+    expect(result.questionResults.get('q1')?.issues[0].type).toBe('FACTUAL_ERROR');
   });
 
   it('runAIValidation throws when OpenAI returns non-200', async () => {
@@ -452,7 +453,7 @@ describe('AI validator — mocked fetch', () => {
     const result = await runAIValidation('test-key', [q], 'BPSC TRE 4', 'History', 'Revolt of 1857', 'Moderate');
 
     expect(result.overallStatus).toBe('VALIDATION_FAILED');
-    expect(result.questionResults.get(1)?.status).toBe('REVIEW');
-    expect(result.questionResults.get(1)?.suggestedFix).toBe('Clarify the question stem');
+    expect(result.questionResults.get('q1')?.status).toBe('REVIEW');
+    expect(result.questionResults.get('q1')?.suggestedFix).toBe('Clarify the question stem');
   });
 });

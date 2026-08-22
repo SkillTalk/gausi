@@ -20,6 +20,7 @@ import { db } from '@/lib/db';
 import { runDeterministicValidation } from '@/lib/admin/deterministic-validator';
 import { runAIValidation, mergeValidationResults, type TopicScopeContext } from '@/lib/admin/ai-validator';
 import { computeStaleQuestions } from '@/lib/admin/validation-freshness';
+import { applyContradictionGuard } from '@/lib/admin/validator-consistency';
 import type { GeneratedQuestion } from '@/types/generated-test';
 import type { QuestionValidationInput, ValidationOverallStatus } from '@/types/validation';
 
@@ -213,6 +214,20 @@ export async function validateTest(testId: string, apiKey: string): Promise<Vali
       newValidationResults = mergeValidationResults(detResults, aiRun.questionResults, cleanQuestionIds);
       // Keep only stale/updated questions from merge
       newValidationResults = newValidationResults.filter((r) => aiCandidateIds.has(r.questionId));
+
+      // Contradiction guard: if AI says FAIL but suggestedFix endorses the current
+      // correct answer, downgrade FAIL→REVIEW. This prevents a self-contradictory AI
+      // response from permanently blocking a question that is likely correct.
+      const { results: guarded, downgradedIds } = applyContradictionGuard(
+        newValidationResults,
+        test.questions as GeneratedQuestion[],
+      );
+      if (downgradedIds.length > 0) {
+        console.warn(
+          `[VAL_SVC:${testId}] Contradiction guard: downgraded FAIL→REVIEW for ${downgradedIds.length} question(s): ${downgradedIds.join(', ')}`,
+        );
+      }
+      newValidationResults = guarded;
       aiModel = aiRun.model;
       aiSummary = aiRun.validationSummary;
     } catch (err) {

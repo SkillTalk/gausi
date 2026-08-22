@@ -240,6 +240,9 @@ export async function repairQuestion(
     if (testValidation) {
       const qv = await db.questionValidationResult.findFirst({
         where: { validationId: testValidation.id, questionId },
+        // Use highest questionVersion — the latest-validated row is most authoritative
+        // if duplicate QVRs exist for the same question (e.g. after partial write retry).
+        orderBy: { questionVersion: 'desc' },
       });
       if (qv) {
         valIssues = (qv.issues as ValidationIssue[]) ?? [];

@@ -262,7 +262,7 @@ describe('ai-validator — TOPIC_SCOPE_FAIL behaviour', () => {
       { strictTopicScope: 'Mauryan administration.', excludeScope: null, topicAdherenceMode: 'STRICT' },
     );
 
-    const qResult = result.questionResults.get(1)!;
+    const qResult = result.questionResults.get('q1')!;
     expect(qResult.status).toBe('FAIL');
     expect(qResult.issues.some((i) => i.type === 'TOPIC_SCOPE_FAIL')).toBe(true);
     expect(result.overallStatus).toBe('VALIDATION_FAILED');
@@ -307,7 +307,7 @@ describe('ai-validator — TOPIC_SCOPE_FAIL behaviour', () => {
       { strictTopicScope: 'Mauryan administration.', excludeScope: null, topicAdherenceMode: 'NORMAL' },
     );
 
-    const qResult = result.questionResults.get(1)!;
+    const qResult = result.questionResults.get('q1')!;
     expect(qResult.status).toBe('REVIEW');
     expect(qResult.issues.some((i) => i.type === 'TOPIC_SCOPE_FAIL')).toBe(true);
   });

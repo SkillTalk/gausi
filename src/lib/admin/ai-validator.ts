@@ -113,6 +113,12 @@ function buildSystemPrompt(
     '- REVIEW: factual uncertainty (cannot confidently verify), minor ambiguity, mild off-topic drift, near-duplicate, disputed quote attribution, or TOPIC_SCOPE_FAIL in NORMAL mode.',
     '  Prefer REVIEW over FAIL when not fully certain — EXCEPT for TOPIC_SCOPE_FAIL which must be FAIL in STRICT mode.',
     '',
+    'MANDATORY SELF-CONSISTENCY CHECK (apply before finalising status=FAIL):',
+    '1. Re-read your issues[] messages and your suggestedFix.',
+    '2. If your suggestedFix says "the correct answer should be [X]" and the question\'s marked correctOption already represents [X], you have produced a self-contradiction: you say the current answer is wrong AND you suggest the same answer as the fix.',
+    '3. In that case, change status to REVIEW (not FAIL). NEVER return status=FAIL when your own suggestedFix endorses the current marked answer.',
+    '4. If you genuinely cannot verify whether the marked answer is wrong, prefer REVIEW over FAIL.',
+    '',
     'IMPORTANT: Do NOT rewrite or alter questions. Only report issues. Do not invent problems that are not present.',
     '',
     'Return ONLY a valid JSON object matching the specified schema. No markdown, no explanations outside the JSON.',
@@ -261,7 +267,13 @@ async function validateBatch(
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export type AIValidationRunResult = {
-  questionResults: Map<number, AIQuestionValidation>; // keyed by question order
+  /**
+   * Validation results keyed by GeneratedQuestion.id (stable questionId).
+   * Mapped positionally from the AI's ordered output so position[i] →
+   * questions[i].id — this is safe because the AI is instructed to return
+   * results in the exact same order as the input.
+   */
+  questionResults: Map<string, AIQuestionValidation>;
   overallStatus: ValidationOverallStatus;
   validationSummary: string;
   model: string;
@@ -290,9 +302,25 @@ export async function runAIValidation(
     allResults.push(...batchResults);
   }
 
-  const questionResults = new Map<number, AIQuestionValidation>();
-  for (const r of allResults) {
-    questionResults.set(r.order, r);
+  // Map by position (questions[i] → allResults[i]) using stable questionId as key.
+  // This is safer than keying by `order` because:
+  //  - For incremental validation the batch may be a subset (e.g. only Q25, order=25).
+  //    The AI is instructed to preserve the order number, but positional mapping is
+  //    the ground truth since count equality is already enforced by parseAIOutput.
+  //  - Using questionId makes downstream lookups unambiguous regardless of ordering.
+  const questionResults = new Map<string, AIQuestionValidation>();
+  for (let i = 0; i < allResults.length; i++) {
+    const question = questions[i];
+    const result = allResults[i];
+    if (question && result) {
+      if (result.order !== question.order) {
+        console.warn(
+          `[AI_VAL] Order mismatch at idx=${i}: expected order=${question.order}, AI returned order=${result.order}. ` +
+          `Using positional mapping (questionId=${question.id}).`,
+        );
+      }
+      questionResults.set(question.id, result);
+    }
   }
 
   const allPass = allResults.every((r) => r.status === 'PASS');
@@ -311,11 +339,16 @@ export async function runAIValidation(
 
 /**
  * Merges deterministic results with AI results.
- * Deterministic FAIL always wins — AI is only applied to questions that cleared deterministic checks.
+ *
+ * Deterministic FAIL always wins — AI is only applied to questions that cleared
+ * deterministic checks.
+ *
+ * aiResults is now keyed by questionId (not by order) to avoid mis-routing when
+ * incremental validation sends only a subset of questions to the AI.
  */
 export function mergeValidationResults(
   deterministicResults: QuestionValidationInput[],
-  aiResults: Map<number, AIQuestionValidation>,
+  aiResults: Map<string, AIQuestionValidation>,
   cleanQuestionIds: Set<string>,
 ): QuestionValidationInput[] {
   return deterministicResults.map((det) => {
@@ -324,9 +357,10 @@ export function mergeValidationResults(
       return det;
     }
 
-    const ai = aiResults.get(det.order);
+    // Look up by stable questionId — never by order/position
+    const ai = aiResults.get(det.questionId);
     if (!ai) {
-      // AI didn't return data for this order — keep deterministic result
+      // AI did not validate this question (not in this incremental batch) — keep det result
       return det;
     }
 

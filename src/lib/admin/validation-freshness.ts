@@ -91,9 +91,19 @@ export function computeStaleQuestions(
   questions: QuestionVersionInfo[],
   qvrList: QVRVersionInfo[],
 ): string[] {
-  const qvrMap = new Map<string, number>(
-    qvrList.map((r) => [r.questionId, r.questionVersion]),
-  );
+  // Build a map from questionId → HIGHEST known QVR.questionVersion.
+  // Using the highest version is robust against duplicate QVR rows that
+  // can arise from partial failures during delete+create cycles.  A Map
+  // constructed directly from an array (`new Map(pairs)`) would silently
+  // keep only the last duplicate, which is non-deterministic when the DB
+  // returns rows in an unspecified order.
+  const qvrMap = new Map<string, number>();
+  for (const r of qvrList) {
+    const existing = qvrMap.get(r.questionId);
+    if (existing === undefined || r.questionVersion > existing) {
+      qvrMap.set(r.questionId, r.questionVersion);
+    }
+  }
 
   return questions
     .filter((gq) => {

@@ -57,10 +57,13 @@ export async function POST(request: Request, { params }: Params) {
       ? b.instruction.trim()
       : undefined;
 
-  // Guard: instruction must not be absurdly long
-  if (instruction && instruction.length > 500) {
+  // Guard: instruction length limit.
+  // MANUAL mode passes full question JSON (no AI call) — allow up to 8000 chars.
+  // AUTO_FIX / REPLACE pass a human hint — limit to 500 chars.
+  const maxInstructionLength = repairMode === 'MANUAL' ? 8000 : 500;
+  if (instruction && instruction.length > maxInstructionLength) {
     return NextResponse.json(
-      { error: 'instruction must be 500 characters or fewer.' },
+      { error: `instruction must be ${maxInstructionLength} characters or fewer for ${repairMode} mode.` },
       { status: 400 },
     );
   }
@@ -78,6 +81,7 @@ export async function POST(request: Request, { params }: Params) {
       result.stage === 'LOAD' ? 404 :
       result.stage === 'STATUS_CHECK' ? (result.error.includes('immutable') || result.error.includes('PASS') ? 409 : 422) :
       result.stage === 'STRUCT_CHECK' ? 422 :
+      result.stage === 'MANUAL_PARSE' ? 400 :
       result.stage === 'AI_CALL' ? 502 : 500;
 
     return NextResponse.json({ error: result.error }, { status });

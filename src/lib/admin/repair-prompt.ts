@@ -23,6 +23,7 @@ export type RepairPromptContext = {
 
   /** The question being repaired. */
   question: {
+    questionType: string;
     questionHi: string;
     questionEn: string;
     optionAHi: string;
@@ -52,7 +53,8 @@ export type RepairPromptContext = {
 
 // The JSON shape the AI must return for a single repaired question.
 const REPAIR_JSON_SCHEMA = `{
-  "questionHi": "<Hindi question text>",
+  "questionType": "<DIRECT | STATEMENT | QUOTE_ATTRIBUTION | CHRONOLOGY | MATCHING | ASSERTION_REASON>",
+  "questionHi": "<Hindi question text — use \\\\n for newlines in multi-line formats>",
   "questionEn": "<English question text>",
   "optionAHi": "<Hindi option A>",
   "optionBHi": "<Hindi option B>",
@@ -101,6 +103,7 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
 
   if (ctx.repairMode === 'AUTO_FIX') {
     lines.push('─── Original Question to Fix ───');
+    lines.push(`Question Type: ${ctx.question.questionType}`);
     lines.push(`Hindi: ${ctx.question.questionHi}`);
     lines.push(`English: ${ctx.question.questionEn}`);
     lines.push(`Option A (Hi): ${ctx.question.optionAHi}`);
@@ -128,20 +131,35 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
     lines.push('');
     lines.push('─── Instructions ───');
     lines.push(
-      'Rewrite this question to fix the identified issue. ' +
-      'Preserve the original learning objective if possible. ' +
+      `Rewrite this ${ctx.question.questionType} question to fix the identified issue. ` +
+      'Preserve the original learning objective and question type if possible. ' +
+      'If the question type itself caused the issue, you may change to DIRECT. ' +
       'The answer must be factually unambiguous.'
     );
+    if (ctx.question.questionType === 'STATEMENT') {
+      lines.push('For STATEMENT questions: verify every individual statement independently before rewriting.');
+    }
+    if (ctx.question.questionType === 'QUOTE_ATTRIBUTION') {
+      lines.push('For QUOTE_ATTRIBUTION: only use historically verified, widely accepted quotes.');
+    }
+    if (ctx.question.questionType === 'CHRONOLOGY') {
+      lines.push('For CHRONOLOGY: verify the actual dates/years before rewriting the sequence.');
+    }
+    if (ctx.question.questionType === 'ASSERTION_REASON') {
+      lines.push('For ASSERTION_REASON: use the exact standard Hindi/English option texts.');
+    }
   } else {
     // REPLACE
     lines.push('─── Original Question Being Replaced ───');
+    lines.push(`Type: ${ctx.question.questionType}`);
     lines.push(`(Removed due to validation failure: ${
       ctx.validatorIssues.map((i) => `[${i.type}] ${i.message}`).join('; ') || 'quality issue'
     })`);
     lines.push('');
     lines.push('─── Instructions ───');
     lines.push(
-      'Generate a completely NEW question from the same exam/category/topic/difficulty. ' +
+      `Generate a completely NEW question from the same exam/category/topic/difficulty. ` +
+      `Preferred type: ${ctx.question.questionType} (or DIRECT if the type is not suitable). ` +
       'Do NOT reuse the original question text. ' +
       'The new question must be factually accurate and unambiguous.'
     );

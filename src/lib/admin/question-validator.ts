@@ -12,9 +12,12 @@
  *  - JSON shape valid
  */
 
-import type { AIQuestion, AIGenerationResult, ValidationResult, ValidationError } from '@/types/generated-test';
+import type { AIQuestion, AIGenerationResult, ValidationResult, ValidationError, QuestionType } from '@/types/generated-test';
+import { QUESTION_TYPES } from '@/types/generated-test';
 
 const VALID_CORRECT_OPTIONS = new Set(['A', 'B', 'C', 'D']);
+const VALID_QUESTION_TYPES = new Set<QuestionType>(QUESTION_TYPES);
+
 const STRING_FIELDS_PER_QUESTION: (keyof AIQuestion)[] = [
   'questionHi', 'questionEn',
   'optionAHi', 'optionBHi', 'optionCHi', 'optionDHi',
@@ -85,6 +88,16 @@ export function validateAIOutput(
         field: `${prefix}.correctOption`,
         message: `correctOption "${q.correctOption}" is invalid. Must be A, B, C, or D.`,
       });
+    }
+
+    // questionType — optional but must be a known value if present
+    if (q.questionType !== undefined) {
+      if (!VALID_QUESTION_TYPES.has(q.questionType as QuestionType)) {
+        errors.push({
+          field: `${prefix}.questionType`,
+          message: `questionType "${String(q.questionType)}" is not a valid type. Must be one of: ${QUESTION_TYPES.join(', ')}.`,
+        });
+      }
     }
 
     // Required string fields

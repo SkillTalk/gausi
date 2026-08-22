@@ -22,6 +22,7 @@ import {
   type RepairMode,
   type RepairPromptContext,
 } from '@/lib/admin/repair-prompt';
+import { QUESTION_TYPES } from '@/types/generated-test';
 import type { ValidationIssue } from '@/types/validation';
 
 const OPENAI_MODEL = 'gpt-4o';
@@ -41,6 +42,7 @@ const REPAIRABLE_STATUSES = new Set([
 export type { RepairMode };
 
 export type RepairedQuestionData = {
+  questionType: string;
   questionHi: string;
   questionEn: string;
   optionAHi: string;
@@ -88,6 +90,8 @@ const REQUIRED_TEXT_FIELDS: (keyof RepairedQuestionData)[] = [
   'explanationEn',
 ];
 
+const VALID_QUESTION_TYPES = new Set<string>(QUESTION_TYPES);
+
 export function validateRepairedQuestion(
   q: Record<string, unknown>,
   /** Texts of all OTHER questions (Hindi + English) to check for duplicates. */
@@ -107,6 +111,12 @@ export function validateRepairedQuestion(
   const co = typeof q.correctOption === 'string' ? q.correctOption.trim().toUpperCase() : '';
   if (!['A', 'B', 'C', 'D'].includes(co)) {
     errors.push(`correctOption must be A, B, C, or D (got: "${String(q.correctOption ?? '')}")`);
+  }
+
+  // questionType — must be a known value if present; defaults to DIRECT if absent
+  const qt = q.questionType;
+  if (qt !== undefined && qt !== null && typeof qt === 'string' && !VALID_QUESTION_TYPES.has(qt)) {
+    errors.push(`questionType "${qt}" is not a valid type.`);
   }
 
   // Duplicate question text check
@@ -145,6 +155,7 @@ export async function repairQuestion(
     questions: Array<{
       id: string;
       order: number;
+      questionType: string;
       questionHi: string;
       questionEn: string;
       optionAHi: string;
@@ -259,7 +270,10 @@ export async function repairQuestion(
     topic: test.topic,
     difficulty: test.difficulty,
     testTitleEn: test.titleEn,
-    question: targetQuestion,
+    question: {
+      ...targetQuestion,
+      questionType: targetQuestion.questionType ?? 'DIRECT',
+    },
     validatorIssues: valIssues,
     suggestedFix,
     factualNotes,
@@ -318,7 +332,9 @@ export async function repairQuestion(
   }
 
   // Build the clean repaired question (server always enforces option E)
+  const rawQType = typeof rawAI.questionType === 'string' ? rawAI.questionType.trim() : '';
   const repaired: RepairedQuestionData = {
+    questionType: VALID_QUESTION_TYPES.has(rawQType) ? rawQType : (targetQuestion.questionType ?? 'DIRECT'),
     questionHi: (rawAI.questionHi as string).trim(),
     questionEn: (rawAI.questionEn as string).trim(),
     optionAHi: (rawAI.optionAHi as string).trim(),
@@ -385,6 +401,7 @@ export async function repairQuestion(
     await db.generatedQuestion.update({
       where: { id: questionId },
       data: {
+        questionType: repaired.questionType,
         questionHi: repaired.questionHi,
         questionEn: repaired.questionEn,
         optionAHi: repaired.optionAHi,

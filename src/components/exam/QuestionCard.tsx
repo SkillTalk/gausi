@@ -29,9 +29,10 @@ export function QuestionCard({ question, index, total, lang, selectedOption, onS
         </span>
       </div>
 
-      {/* Question text */}
+      {/* Question text — whitespace-pre-wrap preserves \n in multi-line formats
+          (STATEMENT, CHRONOLOGY, ASSERTION_REASON) without breaking simple questions */}
       <p
-        className="mt-4 text-slate-900 font-medium leading-relaxed"
+        className="mt-4 text-slate-900 font-medium leading-relaxed whitespace-pre-wrap"
         style={{ fontSize: 'clamp(17px, 2vw, 21px)', lineHeight: '1.65' }}
       >
         {t.question}

@@ -133,6 +133,7 @@ export async function generateTest(
         category: q.category.trim(),
         topic: q.topic.trim(),
         difficulty: q.difficulty.trim(),
+        questionType: q.questionType?.trim() ?? 'DIRECT',
         questionHi: q.questionHi.trim(),
         optionAHi: q.optionAHi.trim(),
         optionBHi: q.optionBHi.trim(),

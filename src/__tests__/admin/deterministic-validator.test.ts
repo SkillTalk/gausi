@@ -13,6 +13,7 @@ function makeQuestion(overrides: Partial<GeneratedQuestion> = {}): GeneratedQues
     category: 'History',
     topic: 'Revolt of 1857',
     difficulty: 'Moderate',
+    questionType: 'DIRECT',
     questionHi: '1857 के विद्रोह का नेता कौन था?',
     optionAHi: 'मंगल पांडे',
     optionBHi: 'नाना साहब',

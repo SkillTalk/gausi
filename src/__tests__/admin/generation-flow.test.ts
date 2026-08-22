@@ -15,6 +15,7 @@ function makeQuestion(order: number, correctOption = 'A') {
     category: 'Leaders',
     topic: 'Revolt of 1857',
     difficulty: 'Beginner',
+    questionType: 'DIRECT' as const,
     questionHi: `प्रश्न ${order}`,
     optionAHi: 'विकल्प A',
     optionBHi: 'विकल्प B',

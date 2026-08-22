@@ -133,6 +133,11 @@ model GeneratedQuestion {
 
   correctOption String   // "A" | "B" | "C" | "D" — never "E"
 
+  // Question format classification (added Aug 2026).
+  // Existing questions default to DIRECT (purely additive — no data loss).
+  questionType  String   @default("DIRECT")
+  // "DIRECT" | "STATEMENT" | "QUOTE_ATTRIBUTION" | "CHRONOLOGY" | "MATCHING" | "ASSERTION_REASON"
+
   createdAt DateTime @default(now())
 
   @@unique([testId, order])

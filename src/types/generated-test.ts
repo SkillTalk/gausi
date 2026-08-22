@@ -1,3 +1,25 @@
+// ─── Question type ────────────────────────────────────────────────────────────
+/**
+ * Classifies the structural/cognitive format of a generated question.
+ * Stored in GeneratedQuestion.questionType (defaults to DIRECT for legacy rows).
+ */
+export type QuestionType =
+  | 'DIRECT'             // Standard single-answer factual/conceptual MCQ
+  | 'STATEMENT'          // "Which of the following statements is/are correct?"
+  | 'QUOTE_ATTRIBUTION'  // "Who said this?" — with a historically-verified quote
+  | 'CHRONOLOGY'         // Arrange events in correct chronological order
+  | 'MATCHING'           // "Which of the following pairs is correctly matched?"
+  | 'ASSERTION_REASON';  // Assertion (A) / Reason (R) format
+
+export const QUESTION_TYPES: QuestionType[] = [
+  'DIRECT',
+  'STATEMENT',
+  'QUOTE_ATTRIBUTION',
+  'CHRONOLOGY',
+  'MATCHING',
+  'ASSERTION_REASON',
+];
+
 // ─── Status ───────────────────────────────────────────────────────────────────
 export type GeneratedTestStatus =
   | 'DRAFT'
@@ -66,6 +88,8 @@ export type GeneratedQuestion = {
   category: string;
   topic: string;
   difficulty: string;
+  /** Question format classification. Defaults to 'DIRECT' for legacy rows. */
+  questionType: string;
   questionHi: string;
   optionAHi: string;
   optionBHi: string;
@@ -94,6 +118,9 @@ export type AIQuestion = {
   category: string;
   topic: string;
   difficulty: string;
+  /** Question format type — included in AI output for new generations.
+   *  Optional for backward compatibility with old tests that predate this field. */
+  questionType?: QuestionType;
   questionHi: string;
   optionAHi: string;
   optionBHi: string;

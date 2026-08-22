@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { validateAIOutput } from '@/lib/admin/question-validator';
 import type { AIGenerationResult } from '@/types/generated-test';
 
+import type { QuestionType } from '@/types/generated-test';
+
 function makeQuestion(overrides: Record<string, unknown> = {}) {
   return {
     order: 1,
     category: 'Leaders',
     topic: 'Revolt of 1857',
     difficulty: 'Beginner',
+    questionType: 'DIRECT' as QuestionType,
     questionHi: '1857 के विद्रोह का नेता कौन था?',
     optionAHi: 'मंगल पांडे',
     optionBHi: 'नाना साहब',

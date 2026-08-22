@@ -280,8 +280,8 @@ function QuestionCard({
           {index + 1}
         </span>
         <div className="flex-1">
-          <div className="text-sm font-semibold text-slate-800 leading-relaxed">{q.questionHi}</div>
-          <div className="text-xs text-slate-500 mt-1 leading-relaxed">{q.questionEn}</div>
+          <div className="text-sm font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">{q.questionHi}</div>
+          <div className="text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-wrap">{q.questionEn}</div>
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1">
           {needsRevalidation

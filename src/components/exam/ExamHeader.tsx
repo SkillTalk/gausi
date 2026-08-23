@@ -27,7 +27,8 @@ export function ExamHeader({
 }: Props) {
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-slate-200 shadow-sm">
-      <div className="container flex h-14 items-center justify-between gap-3">
+      {/* gap-2 on mobile (8px) to fit 360px viewport; gap-3 on sm+ */}
+      <div className="container flex h-14 items-center justify-between gap-2 sm:gap-3">
         {/* Left: exam name + progress */}
         <div className="flex items-center gap-3 min-w-0">
           <span className="hidden sm:inline text-xs font-bold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-1 rounded-full whitespace-nowrap">

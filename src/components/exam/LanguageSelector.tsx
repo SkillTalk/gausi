@@ -49,7 +49,9 @@ function LangButton({
       aria-checked={isSelected}
       onClick={() => onClick(lang)}
       className={cn(
-        'rounded-lg px-6 py-2.5 text-sm font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+        // px-2.5 on mobile keeps the header under 360px viewport width.
+        // px-5 on sm+ restores the original comfortable touch target.
+        'rounded-lg px-2.5 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
         isSelected
           ? 'bg-brand-600 text-white shadow-sm'
           : 'text-slate-600 hover:bg-white hover:text-slate-900'

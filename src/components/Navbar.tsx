@@ -15,10 +15,18 @@ const mobileMenuItems: { href: Route; label: string }[] = [
   { href: '/tre4/history', label: 'My Attempts' },
 ];
 
+/**
+ * The active test-taking route uses its own ExamHeader chrome.
+ * Suppress the public Navbar there to give back vertical space and remove
+ * distractions. Only this route is excluded; all other pages keep the Navbar.
+ */
+const EXAM_TEST_RE = /^\/tre4\/[^/]+\/test$/;
+
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement>(null);
+  const isExamTest = EXAM_TEST_RE.test(pathname);
 
   // Close menu on route change
   useEffect(() => {
@@ -42,6 +50,10 @@ export function Navbar() {
     document.body.style.overflow = menuOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [menuOpen]);
+
+  // Suppress the public site nav on the active exam page — all hooks must run
+  // above this return to satisfy the Rules of Hooks.
+  if (isExamTest) return null;
 
   return (
     <header

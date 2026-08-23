@@ -42,6 +42,12 @@ const config: Config = {
           from: { opacity: '0', transform: 'translateY(12px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
+        // Opacity-only variant used by PageTransition so that position:fixed
+        // descendants are never trapped in an animated transform containing block.
+        'fade-in-page': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
         'scale-in': {
           from: { opacity: '0', transform: 'scale(0.96)' },
           to: { opacity: '1', transform: 'scale(1)' },
@@ -58,6 +64,7 @@ const config: Config = {
       animation: {
         'gradient-x': 'gradient-x 8s ease infinite',
         'fade-in': 'fade-in 0.4s ease both',
+        'fade-in-page': 'fade-in-page 0.25s ease both',
         'scale-in': 'scale-in 0.25s ease both',
         'pulse-subtle': 'pulse-subtle 1.5s ease-in-out infinite',
         blob: 'blob 8s ease-in-out infinite',

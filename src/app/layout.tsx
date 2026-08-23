@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Navbar } from '@/components/Navbar';
@@ -8,6 +8,16 @@ import { PageTransition } from '@/components/PageTransition';
 import { Analytics } from '@/components/Analytics';
 
 const inter = Inter({ subsets: ['latin'] });
+
+// Correct Next.js App Router viewport export — keeps width=device-width,
+// initial-scale=1 so the page fits the physical screen width on first load.
+// viewport-fit=cover enables env(safe-area-inset-*) on notched iPhones.
+// We intentionally omit maximum-scale / user-scalable to preserve accessibility.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),

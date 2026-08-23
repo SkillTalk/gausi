@@ -21,7 +21,7 @@ import {
   applyContradictionGuard,
 } from '@/lib/admin/validator-consistency';
 import type { GeneratedQuestion } from '@/types/generated-test';
-import type { QuestionValidationInput } from '@/types/validation';
+import type { IssueType, QuestionValidationInput } from '@/types/validation';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ function makeFailResult(
   qId: string,
   suggestedFix: string | null,
   factualNotes: string | null = null,
-  extraIssueTypes: string[] = [],
+  extraIssueTypes: IssueType[] = [],
 ): QuestionValidationInput {
   return {
     questionId: qId,
@@ -354,13 +354,15 @@ describe('11: contradiction detection is per-question (not batch)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('12: UI distinguishes all-current from all-passed', () => {
-  it('allCurrent true when staleCount=0 but overallStatus=VALIDATION_FAILED', () => {
-    const staleCount = 0;
-    const overallStatus = 'VALIDATION_FAILED';
-    const validationExists = true;
-
+  // Helper to match the UI logic — avoids literal-type-narrowing TS errors
+  function computeUI(staleCount: number, overallStatus: string, validationExists: boolean) {
     const allCurrent = validationExists && staleCount === 0;
     const allPassed = allCurrent && overallStatus === 'READY';
+    return { allCurrent, allPassed };
+  }
+
+  it('allCurrent true when staleCount=0 but overallStatus=VALIDATION_FAILED', () => {
+    const { allCurrent, allPassed } = computeUI(0, 'VALIDATION_FAILED', true);
 
     expect(allCurrent).toBe(true);   // no stale — but NOT all passed
     expect(allPassed).toBe(false);   // REVIEW questions exist
@@ -369,23 +371,14 @@ describe('12: UI distinguishes all-current from all-passed', () => {
   });
 
   it('allPassed true only when staleCount=0 AND overallStatus=READY', () => {
-    const staleCount = 0;
-    const overallStatus = 'READY';
-    const validationExists = true;
-
-    const allCurrent = validationExists && staleCount === 0;
-    const allPassed = allCurrent && overallStatus === 'READY';
+    const { allPassed } = computeUI(0, 'READY', true);
 
     expect(allPassed).toBe(true);
     // UI should show: '✓ All Questions Passed' (green)
   });
 
   it('staleCount>0 → neither allCurrent nor allPassed', () => {
-    const staleCount = 2;
-    const overallStatus = 'READY';
-
-    const allCurrent = true && staleCount === 0;
-    const allPassed = allCurrent && overallStatus === 'READY';
+    const { allCurrent, allPassed } = computeUI(2, 'READY', true);
 
     expect(allCurrent).toBe(false);
     expect(allPassed).toBe(false);

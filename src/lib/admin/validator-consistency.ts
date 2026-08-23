@@ -29,13 +29,21 @@ import type { GeneratedQuestion } from '@/types/generated-test';
 import type { QuestionValidationInput, ValidationIssue } from '@/types/validation';
 
 // Issue types that constitute independent blocking reasons.
-// A self-contradiction cannot override these — they require genuine admin review.
+// A self-contradiction cannot override these — they require genuine admin review
+// or replacement, regardless of what the validator's suggestedFix says.
 const INDEPENDENT_BLOCKING_TYPES = new Set([
   'TOPIC_SCOPE_FAIL',
   'AMBIGUITY',
   'NEAR_DUPLICATE',
   'TRANSLATION_MISMATCH',
   'DUPLICATE_QUESTION',
+  /**
+   * INVALID_ORDERING_CRITERION — The question structure itself is ambiguous.
+   * Even if the validator's suggestedFix matches the current answer, the question
+   * cannot be auto-PASSED because multiple correct answers may exist.
+   * Recommended action: REPLACE with a structurally valid question.
+   */
+  'INVALID_ORDERING_CRITERION',
 ]);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

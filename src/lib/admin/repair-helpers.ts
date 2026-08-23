@@ -20,8 +20,27 @@ export function isRepairableValidationResult(qVal: StoredQuestionValidation): bo
   return issues.some(
     (i) =>
       i.type === 'TOPIC_SCOPE_FAIL' ||
+      i.type === 'INVALID_ORDERING_CRITERION' ||
       i.type === 'DUPLICATE_QUESTION' ||
       i.type === 'NEAR_DUPLICATE' ||
       i.severity === 'ERROR',
   );
+}
+
+/**
+ * Returns the recommended default repair mode for a question validation result.
+ *
+ * REPLACE is the default for:
+ *   - TOPIC_SCOPE_FAIL: rewriting an out-of-scope question often produces a weak result.
+ *   - INVALID_ORDERING_CRITERION: the question structure is ambiguous; Auto Fix cannot
+ *     introduce a valid ordering criterion without fundamentally changing the question.
+ *
+ * AUTO_FIX is the default for all other repairable issues (factual errors, etc.).
+ */
+export function defaultRepairMode(qVal: StoredQuestionValidation): 'AUTO_FIX' | 'REPLACE' {
+  const issues = qVal.issues as ValidationIssue[];
+  const needsReplace = issues.some(
+    (i) => i.type === 'TOPIC_SCOPE_FAIL' || i.type === 'INVALID_ORDERING_CRITERION',
+  );
+  return needsReplace ? 'REPLACE' : 'AUTO_FIX';
 }

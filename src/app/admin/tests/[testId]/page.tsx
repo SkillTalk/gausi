@@ -101,10 +101,14 @@ function RepairModal({
 }: RepairModalProps) {
   const issues = qVal.issues as ValidationIssue[];
   const hasScopeFail = issues.some((i) => i.type === 'TOPIC_SCOPE_FAIL');
+  const hasInvalidOrdering = issues.some((i) => i.type === 'INVALID_ORDERING_CRITERION');
+  const hasReplaceFirst = hasScopeFail || hasInvalidOrdering;
 
-  // Default to REPLACE for scope failures — rewriting an out-of-scope question
-  // often produces a weak question; replacing with a fresh in-scope one is safer.
-  const [mode, setMode] = useState<RepairMode>(hasScopeFail ? 'REPLACE' : 'AUTO_FIX');
+  // Default to REPLACE for scope failures or invalid ordering criteria:
+  //   - Out-of-scope questions: rewriting often produces a weak in-scope question
+  //   - Invalid ordering: the question structure itself is ambiguous; Auto Fix
+  //     cannot invent a valid criterion — a fresh replacement is required.
+  const [mode, setMode] = useState<RepairMode>(hasReplaceFirst ? 'REPLACE' : 'AUTO_FIX');
   const [instruction, setInstruction] = useState('');
   const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,12 +180,37 @@ function RepairModal({
           </div>
         )}
 
-        {/* Other validator feedback (non-scope issues) */}
-        {issues.filter((i) => i.type !== 'TOPIC_SCOPE_FAIL').length > 0 && (
+        {/* INVALID_ORDERING_CRITERION prominent banner */}
+        {hasInvalidOrdering && (
+          <div className="bg-red-50 border border-red-300 rounded-xl px-4 py-3 space-y-2">
+            <p className="text-sm font-bold text-red-800 flex items-center gap-2">
+              ⚠️ Invalid Ordering Criterion
+            </p>
+            <div className="space-y-1">
+              {issues
+                .filter((i) => i.type === 'INVALID_ORDERING_CRITERION')
+                .map((issue, idx) => (
+                  <p key={idx} className="text-xs text-red-700">{issue.message}</p>
+                ))}
+            </div>
+            <p className="text-xs text-red-600 mt-1">
+              This question asks students to order entities that have no objectively
+              comparable single axis (e.g. independent rivers &quot;from source to sea&quot;).
+              Multiple valid sequences may exist — the question is structurally ambiguous.
+            </p>
+            <p className="text-xs text-red-600 italic">
+              Required: <strong>Replace with New</strong> — Auto Fix cannot introduce a valid
+              ordering criterion without changing the question&apos;s intent.
+            </p>
+          </div>
+        )}
+
+        {/* Other validator feedback (non-scope, non-ordering issues) */}
+        {issues.filter((i) => i.type !== 'TOPIC_SCOPE_FAIL' && i.type !== 'INVALID_ORDERING_CRITERION').length > 0 && (
           <div className="space-y-1">
             <p className="text-xs font-semibold text-red-700 uppercase tracking-wide">Problem</p>
             {issues
-              .filter((i) => i.type !== 'TOPIC_SCOPE_FAIL')
+              .filter((i) => i.type !== 'TOPIC_SCOPE_FAIL' && i.type !== 'INVALID_ORDERING_CRITERION')
               .map((issue, i) => (
                 <div key={i} className={`text-xs rounded px-2 py-1.5 ${
                   issue.severity === 'ERROR' ? 'bg-red-50 text-red-800' : 'bg-amber-50 text-amber-800'
@@ -191,8 +220,8 @@ function RepairModal({
               ))}
           </div>
         )}
-        {/* Non-scope issues only — scope suggested fix shown in scope banner */}
-        {qVal.suggestedFix && !hasScopeFail && (
+        {/* Non-scope/non-ordering issues only — those shown in their own banners */}
+        {qVal.suggestedFix && !hasReplaceFirst && (
           <div className="text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
             <span className="font-semibold text-slate-600">Suggested fix: </span>
             {qVal.suggestedFix}

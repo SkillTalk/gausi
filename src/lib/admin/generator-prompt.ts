@@ -151,6 +151,37 @@ questionType: "CHRONOLOGY"
 RULE: Exactly one sequence must be historically correct. Use real verifiable dates/years.
 The 4 options must contain 4 different orderings (no two options the same).
 
+⚠️  CHRONOLOGY VALIDITY — MANDATORY SELF-CHECK before finalising a CHRONOLOGY question:
+
+Before writing a CHRONOLOGY/ordering question, ask yourself:
+  "Is there exactly ONE objectively defensible ordering for these entities?"
+
+If the answer is NO — do not generate this question type for these entities.
+Generate a DIRECT or STATEMENT question about the same topic instead.
+
+VALID ordering criteria (use these):
+  ✓ chronological order by known historical dates/years
+  ✓ north to south by geographic location
+  ✓ west to east by longitude
+  ✓ upstream to downstream along the SAME river/drainage system
+  ✓ ascending/descending numerical value (area, population, height)
+  ✓ administrative or constitutional hierarchy
+  ✓ stages of a well-defined process (e.g., phases of a battle, legislative steps)
+
+INVALID ordering criteria (NEVER use):
+  ✗ "from source to sea" across DIFFERENT independent rivers
+     → Each river has its own geography. There is no shared axis.
+     → Example of BANNED question: "Arrange Brahmaputra, Narmada, Godavari, Kaveri from source to sea."
+  ✗ "in correct order" without specifying what criterion defines "correct"
+  ✗ Any question where multiple valid orderings exist depending on interpretation
+
+GEOGRAPHY-SPECIFIC NOTE:
+  DO NOT generate questions asking students to order multiple independent rivers
+  "from source to sea" — this is always INVALID because independent rivers cannot
+  share a single "source-to-sea" sequence.
+  Instead use: "Arrange from north to south", "west to east by longitude of mouth",
+  or "by total length (ascending)", or order events on the SAME river.
+
 ────────────────────────────────────────────────────
 
 ■ MATCHING — Correctly matched pairs
@@ -222,6 +253,7 @@ export function buildSystemPrompt(mode: 'STRICT' | 'NORMAL' = 'STRICT'): string 
     '17. AVOID having the same question structure back-to-back more than twice. Vary the sequence.',
     scopeRule,
     '19. TITLE INTEGRITY: Use the admin-provided topic name exactly in the "topic" field of every question. Do NOT rename, abbreviate or broaden the topic silently.',
+    '20. CHRONOLOGY VALIDITY: For CHRONOLOGY/ORDERING questions the ordering criterion MUST be objectively measurable and yield exactly ONE correct sequence. Invalid: "arrange independent rivers from source to sea" (each river is independent — no shared axis). Valid: "arrange by chronological date", "north to south", "west to east", "ascending length". If no valid single-answer criterion exists, generate DIRECT or STATEMENT instead.',
   ].join('\n');
 }
 

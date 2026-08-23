@@ -24,6 +24,24 @@ export type IssueType =
   | 'TOPIC_SCOPE_FAIL'
   | 'DIFFICULTY_MISMATCH'
   | 'NEAR_DUPLICATE'
+  /**
+   * INVALID_ORDERING_CRITERION — A CHRONOLOGY/ORDERING question lacks an
+   * objectively measurable, single-answer comparison axis.
+   *
+   * Examples of invalid criteria:
+   *   "Arrange rivers from source to sea" (independent rivers have no common axis)
+   *   "Arrange in correct order" (vague — multiple interpretations possible)
+   *
+   * Examples of valid criteria:
+   *   "Arrange events in chronological order (by year)"
+   *   "Arrange rivers from west to east by their mouths"
+   *   "Arrange from north to south"
+   *   "Arrange by ascending numerical value"
+   *
+   * Recommended repair action: REPLACE (replace with a structurally valid question).
+   * Auto-PASS is blocked even if suggestedFix matches current answer.
+   */
+  | 'INVALID_ORDERING_CRITERION'
   | 'OTHER';
 
 export type ValidationIssue = {

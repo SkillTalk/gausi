@@ -126,7 +126,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {tre4TopicGroups.map((group, i) => (
               <MotionSection key={group.id} delay={i * 0.05}>
-                <Link href="/tre4/topics" className="card-hover p-5 flex flex-col items-center text-center h-full">
+                <Link href={`/tre4/topics?category=${group.id}`} className="card-hover p-5 flex flex-col items-center text-center h-full">
                   <div
                     className={`h-14 w-14 rounded-2xl bg-gradient-to-br ${group.color} flex items-center justify-center text-white font-extrabold text-xl shadow-card mb-3`}
                   >

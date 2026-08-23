@@ -8,13 +8,51 @@ import { getDbTestsForGroup, buildStaticSlugSet, type DbTopicTest } from '@/lib/
 // Always server-render so DB tests appear without a stale cache.
 export const dynamic = 'force-dynamic';
 
-export const metadata: Metadata = {
-  title: 'Topic-wise Practice — BPSC TRE 4',
-  description: 'Practice BPSC TRE 4 topic-wise: History, Geography, Science, Mathematics and more in Hindi & English.',
-};
+// Set of valid category IDs (group.id values) for quick lookup.
+const VALID_CATEGORY_IDS = new Set(tre4TopicGroups.map((g) => g.id));
 
-export default async function TopicsPage() {
-  // ── Static: map topicId → first static test slug ───────────────────────────
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>;
+}): Promise<Metadata> {
+  const params = await searchParams;
+  const categoryId = params.category?.trim() ?? '';
+  const group = VALID_CATEGORY_IDS.has(categoryId)
+    ? tre4TopicGroups.find((g) => g.id === categoryId)
+    : null;
+
+  if (group) {
+    return {
+      title: `${group.label} Practice — BPSC TRE 4`,
+      description: `Practice BPSC TRE 4 ${group.label} topic-wise MCQs in Hindi & English.`,
+    };
+  }
+  return {
+    title: 'Topic-wise Practice — BPSC TRE 4',
+    description:
+      'Practice BPSC TRE 4 topic-wise: History, Geography, Science, Mathematics and more in Hindi & English.',
+  };
+}
+
+export default async function TopicsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>;
+}) {
+  const params = await searchParams;
+  const categoryId = params.category?.trim() ?? '';
+
+  // Resolve which group(s) to display.
+  // Valid category → show only that group.
+  // Invalid or absent → show all groups.
+  const filteredGroup = VALID_CATEGORY_IDS.has(categoryId)
+    ? tre4TopicGroups.find((g) => g.id === categoryId) ?? null
+    : null;
+  const visibleGroups = filteredGroup ? [filteredGroup] : tre4TopicGroups;
+  const isFiltered = filteredGroup !== null;
+
+  // ── Static: map topicId → first static test slug ─────────────────────────
   const topicTestMap: Record<string, string> = {};
   for (const t of tre4Tests) {
     if (!topicTestMap[t.topicId]) topicTestMap[t.topicId] = t.slug;
@@ -23,7 +61,7 @@ export default async function TopicsPage() {
   // Slugs already shown by static topic cards — used to deduplicate DB tests.
   const staticSlugs = buildStaticSlugSet(tre4Tests);
 
-  // ── DB: fetch all PUBLISHED tests for this exam ────────────────────────────
+  // ── DB: fetch all PUBLISHED tests for this exam ──────────────────────────
   let dbTests: DbTopicTest[] = [];
   try {
     const rows = await getPublishedDbTests({ exam: 'BPSC TRE 4' });
@@ -43,19 +81,43 @@ export default async function TopicsPage() {
       <div className="container py-10 md:py-14">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            href="/tre4"
-            className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-4"
-          >
-            ← BPSC TRE 4
-          </Link>
-          <h1 className="text-3xl font-extrabold text-slate-900">Topic-wise Practice</h1>
-          <p className="text-slate-500 mt-2">Choose a subject and topic to start practising.</p>
+          {isFiltered ? (
+            /* Filtered: back link → All Subjects */
+            <Link
+              href="/tre4/topics"
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-4"
+            >
+              ← All Subjects
+            </Link>
+          ) : (
+            <Link
+              href="/tre4"
+              className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 mb-4"
+            >
+              ← BPSC TRE 4
+            </Link>
+          )}
+
+          {isFiltered && filteredGroup ? (
+            <>
+              <h1 className="text-3xl font-extrabold text-slate-900">
+                {filteredGroup.label} Practice
+              </h1>
+              <p className="text-slate-500 mt-2">
+                Choose a {filteredGroup.label} topic to start practising.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-3xl font-extrabold text-slate-900">Topic-wise Practice</h1>
+              <p className="text-slate-500 mt-2">Choose a subject and topic to start practising.</p>
+            </>
+          )}
         </div>
 
         {/* Subject groups */}
         <div className="flex flex-col gap-10">
-          {tre4TopicGroups.map((group) => {
+          {visibleGroups.map((group) => {
             // DB tests for this group that are not already shown by a static card
             const groupDbCategory = group.dbCategory ?? group.label;
             const dynamicTests = getDbTestsForGroup(dbTests, groupDbCategory, staticSlugs);

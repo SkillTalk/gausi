@@ -100,7 +100,7 @@ export default async function TRE4Page() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
             {tre4TopicGroups.map((group) => (
               <Link
-                href="/tre4/topics"
+                href={`/tre4/topics?category=${group.id}`}
                 key={group.id}
                 className="card-hover p-4 text-center"
               >

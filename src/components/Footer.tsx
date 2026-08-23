@@ -1,8 +1,17 @@
+'use client';
+
+import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import { siteConfig } from '@/content/site';
 
+// Active test-taking route uses distraction-free exam chrome; no Footer needed.
+const EXAM_TEST_RE = /^\/tre4\/[^/]+\/test$/;
+
 export function Footer() {
+  const pathname = usePathname();
+  if (EXAM_TEST_RE.test(pathname)) return null;
+
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="container py-10 text-sm text-slate-500">

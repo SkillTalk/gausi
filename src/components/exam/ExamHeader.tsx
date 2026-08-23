@@ -44,17 +44,18 @@ export function ExamHeader({
         </div>
 
         {/* Right: timer + submit */}
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
-            <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2 sm:px-3 py-1.5">
+            <svg className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <ExamTimer expiresAt={expiresAt} onExpire={onExpire} />
           </div>
+          {/* Submit — visible on all screen sizes; compact on mobile */}
           <button
             onClick={onSubmitClick}
-            className="btn-primary text-xs py-2 px-3 hidden sm:inline-flex"
+            className="btn-danger text-[11px] sm:text-xs py-1.5 px-2 sm:px-3 font-semibold"
           >
             Submit
           </button>

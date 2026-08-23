@@ -18,7 +18,7 @@ export function QuestionCard({ question, index, total, lang, selectedOption, onS
   const t = question[lang];
 
   return (
-    <div className="question-card p-6 md:p-8 animate-fade-in">
+    <div className="question-card p-4 sm:p-6 md:p-8 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-1">
         <span className="text-xs font-semibold uppercase tracking-wider text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full">
@@ -32,14 +32,14 @@ export function QuestionCard({ question, index, total, lang, selectedOption, onS
       {/* Question text — whitespace-pre-wrap preserves \n in multi-line formats
           (STATEMENT, CHRONOLOGY, ASSERTION_REASON) without breaking simple questions */}
       <p
-        className="mt-4 text-slate-900 font-medium leading-relaxed whitespace-pre-wrap"
-        style={{ fontSize: 'clamp(17px, 2vw, 21px)', lineHeight: '1.65' }}
+        className="mt-3 sm:mt-4 text-slate-900 font-medium leading-relaxed whitespace-pre-wrap"
+        style={{ fontSize: 'clamp(16px, 2vw, 21px)', lineHeight: '1.6' }}
       >
         {t.question}
       </p>
 
       {/* Options */}
-      <div className="mt-6 flex flex-col gap-2.5" role="radiogroup" aria-label="Answer options">
+      <div className="mt-4 sm:mt-6 flex flex-col gap-2 sm:gap-2.5" role="radiogroup" aria-label="Answer options">
         {OPTION_LABELS.map((key) => {
           const isSelected = selectedOption === key;
           const isE = key === 'E';

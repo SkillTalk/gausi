@@ -160,6 +160,11 @@ export default function TestPage({ params }: PageProps) {
       return markVisited(setCurrentQuestion(s, index), q.id);
     });
     setShowPalette(false);
+    // On mobile, scroll back to the top of the page so the question is
+    // visible immediately without requiring manual upward scrolling.
+    if (typeof window !== 'undefined' && window.innerWidth < 640) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const handleNext = () => {
@@ -236,7 +241,7 @@ export default function TestPage({ params }: PageProps) {
         onSubmitClick={() => setShowSubmit(true)}
       />
 
-      <div className="container py-4 md:py-6">
+      <div className="container py-3 sm:py-4 md:py-6">
         <div className="flex gap-6 items-start">
           <div className="flex-1 min-w-0">
             {currentQ && (
@@ -249,7 +254,9 @@ export default function TestPage({ params }: PageProps) {
                   selectedOption={session.answers[currentQ.id] as OptionKey | undefined}
                   onSelect={handleSelectOption}
                 />
-                <div className="mt-4">
+
+                {/* Desktop/tablet nav — hidden on mobile, replaced by sticky bottom bar */}
+                <div className="hidden sm:block mt-4">
                   <ExamNavBar
                     isFirst={isFirst}
                     isLast={isLast}
@@ -266,6 +273,7 @@ export default function TestPage({ params }: PageProps) {
             )}
           </div>
 
+          {/* Desktop sidebar palette — lg+ only */}
           <aside className="hidden lg:block w-64 shrink-0 sticky top-20">
             <div className="card p-4">
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-4">
@@ -281,8 +289,9 @@ export default function TestPage({ params }: PageProps) {
           </aside>
         </div>
 
-        <div className="lg:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200 pb-safe">
-          <div className="container py-2 flex items-center justify-between gap-2">
+        {/* Tablet bottom bar (sm → lg): palette toggle + submit — unchanged behaviour */}
+        <div className="hidden sm:block lg:hidden fixed bottom-0 inset-x-0 z-20 bg-white border-t border-slate-200">
+          <div className="container py-2 flex items-center justify-between gap-2" style={{ paddingBottom: 'max(8px, env(safe-area-inset-bottom))' }}>
             <button
               onClick={() => setShowPalette((p) => !p)}
               className="btn-secondary text-xs py-2 flex-1"
@@ -306,7 +315,111 @@ export default function TestPage({ params }: PageProps) {
           )}
         </div>
 
-        <div className="h-24 lg:h-0" />
+        {/* ── MOBILE-ONLY sticky bottom navigation bar (< sm / 640px) ──────────── */}
+        {/* Palette bottom-sheet overlay */}
+        {showPalette && (
+          <div className="sm:hidden fixed inset-0 z-40">
+            {/* Dark backdrop — closes palette when tapped */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setShowPalette(false)}
+              aria-hidden
+            />
+            {/* Sheet — sits above the nav bar (bottom-[58px]) */}
+            <div
+              className="absolute inset-x-0 bg-white rounded-t-2xl overflow-y-auto"
+              style={{ bottom: 58, maxHeight: '65vh' }}
+            >
+              <div className="px-4 pt-4 pb-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-bold text-slate-800">Questions Palette</h3>
+                  <button
+                    onClick={() => setShowPalette(false)}
+                    className="h-7 w-7 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 text-sm font-bold"
+                    aria-label="Close palette"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <QuestionPalette
+                  questions={test.questions}
+                  session={session}
+                  currentIndex={session.currentQuestion}
+                  onNavigate={navigateTo}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Mobile 4-button sticky bottom nav */}
+        <div className="sm:hidden fixed bottom-0 inset-x-0 z-50 bg-white border-t border-slate-200">
+          <div
+            className="grid grid-cols-4 gap-0"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            {/* Previous */}
+            <button
+              onClick={handlePrev}
+              disabled={isFirst}
+              aria-label="Previous question"
+              className="flex flex-col items-center justify-center py-3 gap-0.5 text-slate-600 disabled:opacity-35 active:bg-slate-50 border-r border-slate-100"
+            >
+              <span className="text-base leading-none">‹</span>
+              <span className="text-[10px] font-semibold">Prev</span>
+            </button>
+
+            {/* Mark Review */}
+            <button
+              onClick={handleMarkReview}
+              aria-label={isMarked ? 'Unmark review' : 'Mark for review'}
+              className={`flex flex-col items-center justify-center py-3 gap-0.5 border-r border-slate-100 active:bg-slate-50 ${
+                isMarked ? 'text-purple-700' : 'text-slate-600'
+              }`}
+            >
+              <span className="text-base leading-none">{isMarked ? '★' : '☆'}</span>
+              <span className="text-[10px] font-semibold">Review</span>
+            </button>
+
+            {/* Palette toggle */}
+            <button
+              onClick={() => setShowPalette((p) => !p)}
+              aria-label="Open question palette"
+              className="flex flex-col items-center justify-center py-3 gap-0.5 text-slate-600 border-r border-slate-100 active:bg-slate-50"
+            >
+              <span className="text-base leading-none">☷</span>
+              <span className="text-[10px] font-semibold">
+                Q {session.currentQuestion + 1}/{test.questions.length}
+              </span>
+            </button>
+
+            {/* Save & Next / Submit */}
+            {isLast ? (
+              <button
+                onClick={() => setShowSubmit(true)}
+                aria-label="Submit test"
+                className="flex flex-col items-center justify-center py-3 gap-0.5 bg-red-50 text-red-700 active:bg-red-100"
+              >
+                <span className="text-base leading-none">✓</span>
+                <span className="text-[10px] font-semibold">Submit</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleNext}
+                aria-label="Save and go to next question"
+                className="flex flex-col items-center justify-center py-3 gap-0.5 bg-brand-600 text-white active:bg-brand-700"
+              >
+                <span className="text-base leading-none">›</span>
+                <span className="text-[10px] font-semibold">Next</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Spacer: pushes content above the sticky bottom bars */}
+        <div className="sm:hidden h-16" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
+        <div className="hidden sm:block lg:hidden h-20" />
+        <div className="hidden lg:block h-0" />
       </div>
 
       {showSubmit && (

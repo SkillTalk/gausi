@@ -198,16 +198,24 @@ export async function POST(req: NextRequest) {
 
   const cleanAnswers = answersMap as Record<string, OptionKey | null>;
 
-  // Check userId exists
-  const user = await db.user.findUnique({ where: { id: b.userId }, select: { id: true } });
+  // Run all independent DB reads in parallel — saves ~1-2 Neon round-trips per submit.
+  const [user, test, existing] = await Promise.all([
+    db.user.findUnique({ where: { id: b.userId as string }, select: { id: true } }),
+    getTestById(b.testId as string),
+    db.testAttempt.findUnique({ where: { idempotencyKey: b.idempotencyKey as string } }),
+  ]);
+
   if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
-
-  // Look up test (static first, then PUBLISHED DB tests)
-  const test = await getTestById(b.testId);
   if (!test) {
     return NextResponse.json({ error: 'Test not found' }, { status: 404 });
+  }
+
+  // Idempotency: if same key exists, return the existing attempt (no duplicate).
+  // Check happens after validation so we don't short-circuit on a bad request.
+  if (existing) {
+    return NextResponse.json({ id: existing.id, idempotent: true }, { status: 200 });
   }
 
   // Server-side score recalculation
@@ -219,13 +227,7 @@ export async function POST(req: NextRequest) {
   const submissionReason = typeof b.submissionReason === 'string' ? b.submissionReason : 'manual';
 
   try {
-    // Idempotency: if same key exists, return the existing attempt (no duplicate)
-    const existing = await db.testAttempt.findUnique({
-      where: { idempotencyKey: b.idempotencyKey as string },
-    });
-    if (existing) {
-      return NextResponse.json({ id: existing.id, idempotent: true }, { status: 200 });
-    }
+    // Idempotency already checked above via Promise.all — proceed to create.
 
     const attempt = await db.testAttempt.create({
       data: {
@@ -265,16 +267,27 @@ export async function POST(req: NextRequest) {
 
 // ─── GET /api/attempts?userId=... ─────────────────────────────────────────────
 
+// Maximum and default row counts for the attempts list endpoint.
+const ATTEMPTS_MAX_LIMIT = 200;
+const ATTEMPTS_DEFAULT_LIMIT = 50;
+
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId || typeof userId !== 'string') {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
 
+  // Optional ?limit=N — prevents unbounded DB reads for users with large histories.
+  const limitParam = req.nextUrl.searchParams.get('limit');
+  const limit = limitParam
+    ? Math.min(Math.max(1, parseInt(limitParam, 10) || ATTEMPTS_DEFAULT_LIMIT), ATTEMPTS_MAX_LIMIT)
+    : ATTEMPTS_DEFAULT_LIMIT;
+
   try {
     const rows = await db.testAttempt.findMany({
       where: { userId },
       orderBy: { submittedAt: 'desc' },
+      take: limit,
       select: {
         id: true,
         testId: true,

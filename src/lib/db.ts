@@ -29,18 +29,14 @@ function createClient(): PrismaClient {
   });
 }
 
-// Lazy getter — client created on first property access, not at import time
-let _client: PrismaClient | undefined;
-
+// Lazy getter — client created on first property access, not at import time.
+// Stored on globalThis in all environments so serverless re-evaluations of this
+// module reuse the same Pool+PrismaClient instead of creating an extra connection.
 function getClient(): PrismaClient {
   if (globalForPrisma.prisma) return globalForPrisma.prisma;
-  if (!_client) {
-    _client = createClient();
-    if (process.env.NODE_ENV !== 'production') {
-      globalForPrisma.prisma = _client;
-    }
-  }
-  return _client;
+  const client = createClient();
+  globalForPrisma.prisma = client;
+  return client;
 }
 
 export const db = new Proxy({} as PrismaClient, {

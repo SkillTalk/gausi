@@ -1,13 +1,12 @@
-'use client';
-import { usePathname } from 'next/navigation';
 import { ReactNode } from 'react';
 
-// Page-change fade using existing Tailwind keyframe — no framer-motion dependency.
-// key={pathname} remounts the div on navigation, replaying the CSS animation.
+// Thin wrapper that applies the fade-in animation once on initial page load.
+// Previously used key={pathname} which forced React to remount the entire page
+// tree on every client navigation, causing redundant re-fetches and state loss.
+// The CSS animation already fires naturally when Next.js renders the new page.
 export function PageTransition({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
   return (
-    <div key={pathname} className="animate-fade-in">
+    <div className="animate-fade-in">
       {children}
     </div>
   );

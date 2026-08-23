@@ -13,7 +13,7 @@ export function RecentAttempts() {
   useEffect(() => {
     if (!loaded || !identity) return;
     setStatus('loading');
-    fetch(`/api/attempts?userId=${encodeURIComponent(identity.userId)}`)
+    fetch(`/api/attempts?userId=${encodeURIComponent(identity.userId)}&limit=5`)
       .then(async (res) => {
         if (!res.ok) throw new Error('failed');
         const data = (await res.json()) as DbAttempt[];

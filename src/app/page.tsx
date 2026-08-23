@@ -25,62 +25,62 @@ export default function HomePage() {
         <div className="blob bottom-[-60px] right-[-60px] h-96 w-96 bg-indigo-400" style={{ animationDelay: '3s' }} aria-hidden />
         <div className="blob top-[30%] left-[40%] h-56 w-56 bg-cyan-400 opacity-20" style={{ animationDelay: '5s' }} aria-hidden />
 
+        {/* Hero content is NOT wrapped in MotionSection so LCP elements are
+            immediately visible from SSR without waiting for JS hydration. */}
         <div className="container relative z-10 py-10 sm:py-16 md:py-24 text-center">
-          <MotionSection>
-            {/* GAUSI icon — square, compact, works on any bg */}
-            <div className="flex justify-center mb-4 sm:mb-5">
-              <Image
-                src="/branding/gausi-icon-192.png"
-                alt="GAUSI"
-                width={80}
-                height={80}
-                sizes="(max-width: 640px) 64px, 80px"
-                className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl shadow-lg"
-                priority
-              />
-            </div>
+          {/* GAUSI icon — square, compact, works on any bg */}
+          <div className="flex justify-center mb-4 sm:mb-5">
+            <Image
+              src="/branding/gausi-icon-192.png"
+              alt="GAUSI"
+              width={80}
+              height={80}
+              sizes="(max-width: 640px) 64px, 80px"
+              className="h-16 w-16 sm:h-20 sm:w-20 rounded-2xl shadow-lg"
+              priority
+            />
+          </div>
 
-            <div className="mb-1">
-              <span className="text-white font-extrabold text-2xl sm:text-3xl tracking-tight">GAUSI</span>
-            </div>
-            <p className="text-white/60 text-xs sm:text-sm font-medium tracking-wide mb-4">
-              {siteConfig.fullForm}
-            </p>
+          <div className="mb-1">
+            <span className="text-white font-extrabold text-2xl sm:text-3xl tracking-tight">GAUSI</span>
+          </div>
+          <p className="text-white/60 text-xs sm:text-sm font-medium tracking-wide mb-4">
+            {siteConfig.fullForm}
+          </p>
 
-            <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-4">
-              <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
-              Bihar State Exams • BPSC TRE 4
-            </div>
+          <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest bg-white/15 border border-white/20 px-3 py-1.5 rounded-full mb-4">
+            <span className="h-1.5 w-1.5 rounded-full bg-cyan-300 animate-pulse" />
+            Bihar State Exams • BPSC TRE 4
+          </div>
 
-            <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold leading-tight">
-              Prepare Smarter for
-              <br />
-              <span className="text-cyan-300">Government Exams</span>
-            </h1>
+          <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold leading-tight">
+            Prepare Smarter for
+            <br />
+            <span className="text-cyan-300">Government Exams</span>
+          </h1>
 
-            <p className="mt-6 text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
-              Daily Practice Sets &nbsp;•&nbsp; Topic-wise Tests &nbsp;•&nbsp; Timed Mock Exams
-              <br />
-              <span className="text-white/60 text-base">Available in Hindi & English</span>
-            </p>
+          <p className="mt-6 text-white/80 text-lg md:text-xl max-w-2xl mx-auto leading-relaxed">
+            Daily Practice Sets &nbsp;•&nbsp; Topic-wise Tests &nbsp;•&nbsp; Timed Mock Exams
+            <br />
+            <span className="text-white/60 text-base">Available in Hindi & English</span>
+          </p>
 
-            <div className="mt-8 flex flex-wrap justify-center gap-4">
-              {latestTest && (
-                <Link
-                  href={`/tre4/${latestTest.slug}/instructions`}
-                  className="btn bg-white text-brand-700 hover:bg-brand-50 font-bold shadow-card-lg px-8 py-3.5 text-base"
-                >
-                  Start Today&apos;s Test →
-                </Link>
-              )}
+          <div className="mt-8 flex flex-wrap justify-center gap-4">
+            {latestTest && (
               <Link
-                href="/tre4/topics"
-                className="btn bg-white/10 text-white border border-white/25 hover:bg-white/20 px-8 py-3.5 text-base"
+                href={`/tre4/${latestTest.slug}/instructions`}
+                className="btn bg-white text-brand-700 hover:bg-brand-50 font-bold shadow-card-lg px-8 py-3.5 text-base"
               >
-                Browse Topics
+                Start Today&apos;s Test →
               </Link>
-            </div>
-          </MotionSection>
+            )}
+            <Link
+              href="/tre4/topics"
+              className="btn bg-white/10 text-white border border-white/25 hover:bg-white/20 px-8 py-3.5 text-base"
+            >
+              Browse Topics
+            </Link>
+          </div>
         </div>
       </section>
 

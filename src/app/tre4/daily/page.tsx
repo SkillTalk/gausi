@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { tre4Tests } from '@/content/exams/tre4/tests';
 import { getPublishedDbTests } from '@/lib/test-provider';
 
-export const dynamic = 'force-dynamic';
+// ISR: revalidate every 60 s. Data-level cache is invalidated immediately on publish/archive.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: 'Daily Practice Tests — BPSC TRE 4',

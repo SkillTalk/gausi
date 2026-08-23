@@ -4,6 +4,7 @@
 // This module is NEVER imported by client code.
 
 import { db } from '@/lib/db';
+import { invalidatePublishedTestsCache } from '@/lib/catalog-cache';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,8 @@ export async function publishTest(testId: string): Promise<PublishResult<{ publi
   });
 
   console.log(`[PUBLISH] ✅ testId=${testId} published at ${publishedAt.toISOString()}`);
+  // Invalidate public catalog cache so listing pages reflect the new test immediately.
+  invalidatePublishedTestsCache();
   return { ok: true, data: { publishedAt } };
 }
 
@@ -175,6 +178,8 @@ export async function archiveTest(testId: string): Promise<PublishResult> {
   });
 
   console.log(`[ARCHIVE] testId=${testId} archived`);
+  // Invalidate public catalog cache so the archived test disappears from listings immediately.
+  invalidatePublishedTestsCache();
   return { ok: true };
 }
 

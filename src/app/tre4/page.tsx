@@ -5,7 +5,9 @@ import { tre4TopicGroups } from '@/content/exams/tre4/topics';
 import { getPublishedDbTests } from '@/lib/test-provider';
 import { RecentAttempts } from '@/components/RecentAttempts';
 
-export const dynamic = 'force-dynamic';
+// ISR: revalidate every 60 s. Data-level cache in getPublishedDbTests
+// is also tagged 'published-tests' and invalidated immediately on publish/archive.
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: 'BPSC TRE 4 Preparation — Daily Tests, Topics & Mock Exams',

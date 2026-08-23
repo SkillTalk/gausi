@@ -4,9 +4,11 @@
 // This module is server-only. Never import it in client components.
 // Use GET /api/tests/[slug] for client-side test loading.
 
+import { unstable_cache } from 'next/cache';
 import { db } from '@/lib/db';
 import { tre4TestsBySlug } from '@/content/exams/tre4/tests';
 import { TRE4_MARKS } from '@/content/exams/tre4/config';
+import { PUBLIC_CATALOG_TAG, CATALOG_TTL_SECONDS } from '@/lib/catalog-cache';
 import type { ExamTest, ExamConfig, Question, CorrectOptionKey, OptionKey } from '@/types/exam';
 
 // ─── Difficulty mapping ───────────────────────────────────────────────────────
@@ -167,8 +169,12 @@ export type PublishedTestSummary = {
   publishedAt: string;
 };
 
-export async function getPublishedDbTests(
-  filters: { category?: string; exam?: string } = {},
+/**
+ * Raw DB query for published tests — never call this directly from pages.
+ * Use getPublishedDbTests() (the cached wrapper below) instead.
+ */
+async function _fetchPublishedDbTests(
+  filters: { category?: string; exam?: string },
 ): Promise<PublishedTestSummary[]> {
   const rows = await db.generatedTest.findMany({
     where: {
@@ -205,4 +211,33 @@ export async function getPublishedDbTests(
     durationMinutes: r.durationMinutes,
     publishedAt: (r.publishedAt ?? r.createdAt).toISOString(),
   }));
+}
+
+/**
+ * Cached wrapper for the published-tests listing query.
+ *
+ * Cache behaviour:
+ *   - Tag: PUBLIC_CATALOG_TAG ('published-tests')
+ *     → invalidated immediately when a test is published or archived
+ *     → see catalog-cache.ts / publish.service.ts
+ *   - TTL: CATALOG_TTL_SECONDS (60 s) — fallback if invalidation fails
+ *
+ * Cache keys are derived from the filter argument, so
+ *   { exam: 'BPSC TRE 4' }  and
+ *   { exam: 'BPSC TRE 4', category: 'History' }
+ * are separate cache entries, both invalidated by the same tag.
+ *
+ * This wrapper is safe to call from server pages and Route Handlers.
+ * It is NEVER used for admin, user-specific, or authentication data.
+ */
+const _cachedFetchPublishedDbTests = unstable_cache(
+  _fetchPublishedDbTests,
+  ['published-db-tests'],
+  { tags: [PUBLIC_CATALOG_TAG], revalidate: CATALOG_TTL_SECONDS },
+);
+
+export async function getPublishedDbTests(
+  filters: { category?: string; exam?: string } = {},
+): Promise<PublishedTestSummary[]> {
+  return _cachedFetchPublishedDbTests(filters);
 }

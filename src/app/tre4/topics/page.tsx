@@ -5,8 +5,11 @@ import { tre4Tests } from '@/content/exams/tre4/tests';
 import { getPublishedDbTests } from '@/lib/test-provider';
 import { getDbTestsForGroup, buildStaticSlugSet, type DbTopicTest } from '@/lib/topics-merge';
 
-// Always server-render so DB tests appear without a stale cache.
-export const dynamic = 'force-dynamic';
+// ISR TTL 60 s. The page also uses searchParams (category filter) which
+// means it renders dynamically per query string, but the underlying
+// getPublishedDbTests() data is served from the tagged unstable_cache
+// and invalidated immediately when a test is published or archived.
+export const revalidate = 60;
 
 // Set of valid category IDs (group.id values) for quick lookup.
 const VALID_CATEGORY_IDS = new Set(tre4TopicGroups.map((g) => g.id));

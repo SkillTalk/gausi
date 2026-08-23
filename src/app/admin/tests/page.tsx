@@ -142,6 +142,10 @@ export default function AdminTestsPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          <a href="/admin/users"
+            className="inline-flex items-center gap-2 border border-slate-300 text-slate-700 text-sm font-semibold px-4 py-2 rounded-xl transition-colors hover:bg-slate-50">
+            👤 User Data
+          </a>
           <a href="/admin/topics"
             className="inline-flex items-center gap-2 border border-brand-300 text-brand-700 text-sm font-semibold px-4 py-2 rounded-xl transition-colors hover:bg-brand-50">
             📋 Topics

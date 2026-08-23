@@ -85,11 +85,17 @@ function IssueRow({ issue }: { issue: ValidationIssue }) {
 type RepairModalProps = {
   testId: string;
   question: GeneratedQuestion;
-  qVal: StoredQuestionValidation;
+  /** Null when question was never validated or for admin editorial replacements of PASS questions. */
+  qVal: StoredQuestionValidation | null;
   /** Test-level scope fields forwarded from the parent page's test object. */
   strictTopicScope?: string | null;
   excludeScope?: string | null;
   topicAdherenceMode?: string | null;
+  /**
+   * True when admin is replacing a PASS question by editorial choice, not because it failed.
+   * Forces REPLACE mode and shows admin-override context instead of validator feedback.
+   */
+  isAdminEditorialReplace?: boolean;
   onClose: () => void;
   onRepaired: () => void;
 };
@@ -97,17 +103,18 @@ type RepairModalProps = {
 function RepairModal({
   testId, question, qVal,
   strictTopicScope, excludeScope, topicAdherenceMode,
+  isAdminEditorialReplace = false,
   onClose, onRepaired,
 }: RepairModalProps) {
-  const issues = qVal.issues as ValidationIssue[];
+  const issues = (qVal?.issues ?? []) as ValidationIssue[];
   const hasScopeFail = issues.some((i) => i.type === 'TOPIC_SCOPE_FAIL');
   const hasInvalidOrdering = issues.some((i) => i.type === 'INVALID_ORDERING_CRITERION');
-  const hasReplaceFirst = hasScopeFail || hasInvalidOrdering;
+  const hasReplaceFirst = isAdminEditorialReplace || hasScopeFail || hasInvalidOrdering;
 
-  // Default to REPLACE for scope failures or invalid ordering criteria:
-  //   - Out-of-scope questions: rewriting often produces a weak in-scope question
-  //   - Invalid ordering: the question structure itself is ambiguous; Auto Fix
-  //     cannot invent a valid criterion — a fresh replacement is required.
+  // Default to REPLACE for admin editorial replacements, scope failures, or invalid ordering:
+  //   - Admin editorial: PASS question being replaced by admin choice — only REPLACE allowed
+  //   - Out-of-scope: rewriting often produces a weak in-scope question
+  //   - Invalid ordering: the question structure is ambiguous; fresh replacement required
   const [mode, setMode] = useState<RepairMode>(hasReplaceFirst ? 'REPLACE' : 'AUTO_FIX');
   const [instruction, setInstruction] = useState('');
   const [repairing, setRepairing] = useState(false);
@@ -148,6 +155,22 @@ function RepairModal({
           <h2 className="text-sm font-extrabold text-slate-900">🔧 Fix / Regenerate Question</h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
         </div>
+
+        {/* Admin editorial replace banner — shown when admin replaces a PASS question */}
+        {isAdminEditorialReplace && (
+          <div className="bg-blue-50 border border-blue-300 rounded-xl px-4 py-3 space-y-1.5">
+            <p className="text-sm font-bold text-blue-800 flex items-center gap-2">
+              ✏ Admin Editorial Replacement
+            </p>
+            <p className="text-xs text-blue-700">
+              This question passed validation. You are replacing it by admin choice —
+              it may be too easy, repetitive, poorly worded, or not useful for exam practice.
+            </p>
+            <p className="text-xs text-blue-600 italic">
+              Only <strong>Replace with New</strong> is available for passing questions.
+            </p>
+          </div>
+        )}
 
         {/* TOPIC_SCOPE_FAIL prominent banner */}
         {hasScopeFail && (
@@ -221,33 +244,44 @@ function RepairModal({
           </div>
         )}
         {/* Non-scope/non-ordering issues only — those shown in their own banners */}
-        {qVal.suggestedFix && !hasReplaceFirst && (
+        {qVal?.suggestedFix && !hasReplaceFirst && (
           <div className="text-xs bg-slate-50 border border-slate-200 rounded px-3 py-2">
             <span className="font-semibold text-slate-600">Suggested fix: </span>
             {qVal.suggestedFix}
           </div>
         )}
 
-        {/* Repair mode */}
+        {/* Repair mode — AUTO_FIX hidden for admin editorial replacements and forced-replace cases */}
         <div>
           <p className="text-xs font-semibold text-slate-600 mb-2">Repair Mode</p>
-          <div className="flex gap-2">
-            {(['AUTO_FIX', 'REPLACE'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
-                  mode === m
-                    ? 'bg-brand-600 text-white border-brand-600'
-                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                {m === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace with New'}
-              </button>
-            ))}
-          </div>
+          {hasReplaceFirst ? (
+            /* Only REPLACE available — show single non-interactive indicator */
+            <div className="flex gap-2">
+              <div className="flex-1 text-sm font-semibold py-2 rounded-lg border bg-brand-600 text-white border-brand-600 text-center cursor-default">
+                ↺ Replace with New
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              {(['AUTO_FIX', 'REPLACE'] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMode(m)}
+                  className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
+                    mode === m
+                      ? 'bg-brand-600 text-white border-brand-600'
+                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  {m === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace with New'}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="text-xs text-slate-400 mt-1.5">
-            {mode === 'AUTO_FIX'
+            {isAdminEditorialReplace
+              ? 'Generate a completely new question on the same topic. The existing question will be replaced.'
+              : mode === 'AUTO_FIX'
               ? hasScopeFail
                 ? 'Try to rewrite this question so it directly tests the declared topic scope. Use only if the learning objective can be preserved within scope.'
                 : 'Rewrite the existing question to fix the issue, preserving the learning objective.'
@@ -268,7 +302,9 @@ function RepairModal({
             rows={3}
             maxLength={500}
             placeholder={
-              hasScopeFail
+              isAdminEditorialReplace
+                ? 'e.g. Make it harder / Use a statement-based format / Avoid direct factual recall / Use a different subtopic / Generate a conceptual question'
+                : hasScopeFail
                 ? 'e.g. Focus on INC sessions and presidential elections, not broader independence movement.'
                 : 'e.g. Keep the question focused on South Indian Satyagraha, not Mandela.'
             }
@@ -560,6 +596,10 @@ function QuestionCard({
     needsRevalidation ||
     (qVal != null && isRepairableValidationResult(qVal))
   );
+  // Any non-published question can be replaced by admin editorial choice (even PASS).
+  const canAdminReplace = !isPublished;
+  // True when this question is being admin-replaced (PASS question, or never validated).
+  const isAdminEditorialReplace = canAdminReplace && (!qVal || qVal.status === 'PASS') && !needsRevalidation;
 
   return (
     <div
@@ -615,14 +655,28 @@ function QuestionCard({
         <p className="text-xs font-semibold text-slate-500 mb-0.5">Explanation</p>
         <p className="text-sm text-slate-700">{q.explanationHi}</p>
         <p className="text-xs text-slate-500 mt-0.5">{q.explanationEn}</p>
-        {/* Edit Correct Answer — shown for PASS questions not already in override mode */}
-        {!isPublished && qVal?.status === 'PASS' && !needsRevalidation && activeActionType !== 'repair' && (
-          <button
-            onClick={() => onActivate('override')}
-            className="mt-2 text-xs font-semibold px-3 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 transition-colors"
-          >
-            🛡 Edit Correct Answer
-          </button>
+        {/* PASS / unvalidated question actions */}
+        {!isPublished && !needsRevalidation && (!qVal || qVal.status === 'PASS') && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {/* Edit Correct Answer — only for PASS questions (not for unvalidated) */}
+            {qVal?.status === 'PASS' && activeActionType !== 'repair' && (
+              <button
+                onClick={() => onActivate('override')}
+                className="text-xs font-semibold px-3 py-1 rounded-lg bg-violet-50 hover:bg-violet-100 border border-violet-200 text-violet-700 transition-colors"
+              >
+                🛡 Edit Correct Answer
+              </button>
+            )}
+            {/* Replace Question — admin editorial replacement (PASS or unvalidated) */}
+            {activeActionType !== 'override' && (
+              <button
+                onClick={() => onActivate('repair')}
+                className="text-xs font-semibold px-3 py-1 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-300 text-slate-600 transition-colors"
+              >
+                ↺ Replace Question
+              </button>
+            )}
+          </div>
         )}
       </div>
 
@@ -672,6 +726,15 @@ function QuestionCard({
                     🔧 Fix / Regenerate Question
                   </button>
                 )}
+                {/* Replace Question — admin editorial, always visible for non-published FAIL/REVIEW */}
+                {canAdminReplace && qVal && (qVal.status === 'FAIL' || qVal.status === 'REVIEW') && activeActionType !== 'override' && !canRepair && (
+                  <button
+                    onClick={() => onActivate('repair')}
+                    className="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors"
+                  >
+                    ↺ Replace Question
+                  </button>
+                )}
                 {!isPublished && (
                   <button
                     onClick={() => onActivate('override')}
@@ -708,14 +771,16 @@ function QuestionCard({
       )}
 
       {/* ── Inline Repair Panel ─────────────────────────────────────────────── */}
-      {activeActionType === 'repair' && qVal && (
+      {/* Shown for FAIL/REVIEW/needsRevalidation repairs AND admin editorial replacements of PASS/unvalidated */}
+      {activeActionType === 'repair' && (qVal || isAdminEditorialReplace) && (
         <RepairModal
           testId={testId}
           question={q}
-          qVal={qVal}
+          qVal={qVal ?? null}
           strictTopicScope={strictTopicScope}
           excludeScope={excludeScope}
           topicAdherenceMode={topicAdherenceMode}
+          isAdminEditorialReplace={isAdminEditorialReplace}
           onClose={onDeactivate}
           onRepaired={onRepairSuccess}
         />

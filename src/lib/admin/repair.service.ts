@@ -255,11 +255,17 @@ export async function repairQuestion(
     // Validation result unavailable — proceed without context.
   }
 
-  // Block repair of questions that passed validation.
-  if (qValStatus === 'PASS') {
+  // PASS question rules:
+  //   REPLACE → allowed (admin editorial override — question may be too easy, repetitive, etc.)
+  //   AUTO_FIX → blocked (nothing to fix in a passing question)
+  //   MANUAL → blocked (MANUAL is for broken content; use REPLACE for editorial changes)
+  if (qValStatus === 'PASS' && repairMode !== 'REPLACE') {
     return {
       ok: false,
-      error: 'This question passed validation and does not need repair. Only FAIL or REVIEW questions can be repaired.',
+      error:
+        repairMode === 'AUTO_FIX'
+          ? 'This question passed validation. AUTO_FIX is not permitted on PASS questions. Use REPLACE for an admin editorial replacement.'
+          : 'This question passed validation. Only REPLACE mode is allowed as an admin editorial override on PASS questions.',
       stage: 'STATUS_CHECK',
     };
   }

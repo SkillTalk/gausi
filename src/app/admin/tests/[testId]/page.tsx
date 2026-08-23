@@ -100,6 +100,19 @@ type RepairModalProps = {
   onRepaired: () => void;
 };
 
+type ReplacementMethod = 'AI_GENERATE' | 'ADMIN_QUESTION';
+
+// Admin-provided question seed (for ADMIN_SEED / Admin Question method)
+type AdminQuestionSeedUI = {
+  questionText: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  correctOption: '' | 'A' | 'B' | 'C' | 'D';
+  explanation: string;
+};
+
 function RepairModal({
   testId, question, qVal,
   strictTopicScope, excludeScope, topicAdherenceMode,
@@ -116,23 +129,61 @@ function RepairModal({
   //   - Out-of-scope: rewriting often produces a weak in-scope question
   //   - Invalid ordering: the question structure is ambiguous; fresh replacement required
   const [mode, setMode] = useState<RepairMode>(hasReplaceFirst ? 'REPLACE' : 'AUTO_FIX');
+  const [replacementMethod, setReplacementMethod] = useState<ReplacementMethod>('AI_GENERATE');
   const [instruction, setInstruction] = useState('');
+  const [adminSeed, setAdminSeed] = useState<AdminQuestionSeedUI>({
+    questionText: '',
+    optionA: '',
+    optionB: '',
+    optionC: '',
+    optionD: '',
+    correctOption: '',
+    explanation: '',
+  });
+  const [showOptionalFields, setShowOptionalFields] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleRepair() {
+    // Validate admin question mode input
+    if (replacementMethod === 'ADMIN_QUESTION' && !adminSeed.questionText.trim()) {
+      setError('Please enter the question text you want to use.');
+      return;
+    }
+
     setRepairing(true);
     setError(null);
+
+    const isAdminQuestionMode = replacementMethod === 'ADMIN_QUESTION';
+    const effectiveRepairMode: RepairMode = isAdminQuestionMode ? 'ADMIN_SEED' : mode;
+
+    // Build request body
+    const body: Record<string, unknown> = {
+      repairMode: effectiveRepairMode,
+    };
+
+    if (isAdminQuestionMode) {
+      // Send adminQuestion object
+      const seed: Record<string, string> = { questionText: adminSeed.questionText.trim() };
+      if (adminSeed.optionA.trim()) seed.optionA = adminSeed.optionA.trim();
+      if (adminSeed.optionB.trim()) seed.optionB = adminSeed.optionB.trim();
+      if (adminSeed.optionC.trim()) seed.optionC = adminSeed.optionC.trim();
+      if (adminSeed.optionD.trim()) seed.optionD = adminSeed.optionD.trim();
+      if (adminSeed.correctOption) seed.correctOption = adminSeed.correctOption;
+      if (adminSeed.explanation.trim()) seed.explanation = adminSeed.explanation.trim();
+      body.adminQuestion = seed;
+      if (instruction.trim()) body.instruction = instruction.trim();
+    } else {
+      if (instruction.trim()) body.instruction = instruction.trim();
+    }
+
     try {
       const res = await fetch(
         `/api/admin/tests/${testId}/questions/${question.id}/repair`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            repairMode: mode,
-            instruction: instruction.trim() || undefined,
-          }),
+          body: JSON.stringify(body),
         },
       );
       const data = await res.json() as { error?: string; message?: string };
@@ -251,77 +302,226 @@ function RepairModal({
           </div>
         )}
 
-        {/* Repair mode — AUTO_FIX hidden for admin editorial replacements and forced-replace cases */}
+        {/* Replacement Method — AI Generate vs Admin Question */}
         <div>
-          <p className="text-xs font-semibold text-slate-600 mb-2">Repair Mode</p>
-          {hasReplaceFirst ? (
-            /* Only REPLACE available — show single non-interactive indicator */
-            <div className="flex gap-2">
-              <div className="flex-1 text-sm font-semibold py-2 rounded-lg border bg-brand-600 text-white border-brand-600 text-center cursor-default">
-                ↺ Replace with New
-              </div>
-            </div>
-          ) : (
-            <div className="flex gap-2">
-              {(['AUTO_FIX', 'REPLACE'] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
-                    mode === m
-                      ? 'bg-brand-600 text-white border-brand-600'
-                      : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
-                  }`}
-                >
-                  {m === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace with New'}
-                </button>
-              ))}
-            </div>
-          )}
+          <p className="text-xs font-semibold text-slate-600 mb-2">Replacement Method</p>
+          <div className="flex gap-2">
+            {(['AI_GENERATE', 'ADMIN_QUESTION'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => {
+                  setReplacementMethod(m);
+                  setError(null);
+                }}
+                className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
+                  replacementMethod === m
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                {m === 'AI_GENERATE' ? '✨ AI Generate' : '✏ Admin Question'}
+              </button>
+            ))}
+          </div>
           <p className="text-xs text-slate-400 mt-1.5">
-            {isAdminEditorialReplace
-              ? 'Generate a completely new question on the same topic. The existing question will be replaced.'
-              : mode === 'AUTO_FIX'
-              ? hasScopeFail
-                ? 'Try to rewrite this question so it directly tests the declared topic scope. Use only if the learning objective can be preserved within scope.'
-                : 'Rewrite the existing question to fix the issue, preserving the learning objective.'
-              : hasScopeFail
-                ? 'Discard this question and generate a completely new one strictly within the declared topic scope and exclusions.'
-                : 'Discard the question and generate a fresh one on the same topic.'}
+            {replacementMethod === 'AI_GENERATE'
+              ? 'AI generates a new question based on your instruction. Suitable for general replacement.'
+              : 'You specify the question. AI completes bilingual fields and any missing options.'}
           </p>
         </div>
 
-        {/* Optional admin instruction */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 mb-1">
-            Additional Instruction (optional)
-          </label>
-          <textarea
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            rows={3}
-            maxLength={500}
-            placeholder={
-              isAdminEditorialReplace
-                ? 'e.g. Make it harder / Use a statement-based format / Avoid direct factual recall / Use a different subtopic / Generate a conceptual question'
-                : hasScopeFail
-                ? 'e.g. Focus on INC sessions and presidential elections, not broader independence movement.'
-                : 'e.g. Keep the question focused on South Indian Satyagraha, not Mandela.'
-            }
-            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
-          />
-          <p className="text-xs text-slate-400 mt-0.5">{instruction.length}/500</p>
-        </div>
+        {/* Admin Question input — shown when replacementMethod = ADMIN_QUESTION */}
+        {replacementMethod === 'ADMIN_QUESTION' && (
+          <div className="space-y-3 border border-blue-200 rounded-xl p-4 bg-blue-50">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-sm font-bold text-blue-800">✏ Your Question</span>
+              <span className="text-xs text-blue-600">(AI completes missing fields)</span>
+            </div>
 
-        {/* Scope mode indicator */}
-        {topicAdherenceMode && (
-          <p className="text-xs text-slate-400">
-            Topic Adherence Mode:{' '}
-            <span className={`font-semibold ${topicAdherenceMode === 'STRICT' ? 'text-amber-700' : 'text-slate-600'}`}>
-              {topicAdherenceMode}
-            </span>
-            {topicAdherenceMode === 'STRICT' && ' — repaired question will be re-validated for scope compliance.'}
-          </p>
+            {/* Required: question text */}
+            <div>
+              <label className="block text-xs font-semibold text-blue-800 mb-1">
+                Question Text <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={adminSeed.questionText}
+                onChange={(e) => setAdminSeed((s) => ({ ...s, questionText: e.target.value }))}
+                rows={4}
+                maxLength={2000}
+                placeholder="Enter the question in English or Hindi. AI will translate the other language automatically."
+                className="w-full border border-blue-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
+              />
+              <p className="text-xs text-slate-400 mt-0.5">
+                {adminSeed.questionText.length}/2000 — your question text is authoritative and will be used verbatim.
+              </p>
+            </div>
+
+            {/* Optional: options and correct answer */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowOptionalFields((s) => !s)}
+                className="text-xs font-semibold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+              >
+                {showOptionalFields ? '▲' : '▼'} Optional: Options &amp; Correct Answer
+                <span className="text-blue-500 font-normal">(AI generates if omitted)</span>
+              </button>
+
+              {showOptionalFields && (
+                <div className="mt-3 space-y-2">
+                  <div className="grid grid-cols-1 gap-2">
+                    {(['A', 'B', 'C', 'D'] as const).map((letter) => {
+                      const key = `option${letter}` as keyof AdminQuestionSeedUI;
+                      return (
+                        <div key={letter} className="flex items-center gap-2">
+                          <span className={`shrink-0 h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold border ${
+                            adminSeed.correctOption === letter
+                              ? 'bg-green-600 text-white border-green-600'
+                              : 'border-slate-300 text-slate-500 bg-white'
+                          }`}>{letter}</span>
+                          <input
+                            type="text"
+                            value={adminSeed[key] as string}
+                            onChange={(e) => setAdminSeed((s) => ({ ...s, [key]: e.target.value }))}
+                            placeholder={`Option ${letter} (optional)`}
+                            maxLength={300}
+                            className="flex-1 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Correct answer selector */}
+                  <div>
+                    <p className="text-xs font-semibold text-slate-600 mb-1">Correct Answer (optional)</p>
+                    <div className="flex gap-2">
+                      {(['', 'A', 'B', 'C', 'D'] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setAdminSeed((s) => ({ ...s, correctOption: opt }))}
+                          className={`px-3 py-1 text-xs font-bold rounded-lg border transition-colors ${
+                            adminSeed.correctOption === opt
+                              ? opt === '' ? 'bg-slate-200 text-slate-700 border-slate-400' : 'bg-green-600 text-white border-green-600'
+                              : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          {opt === '' ? 'AI decides' : opt}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">Option E can never be the correct answer.</p>
+                  </div>
+
+                  {/* Optional explanation */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Explanation (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={adminSeed.explanation}
+                      onChange={(e) => setAdminSeed((s) => ({ ...s, explanation: e.target.value }))}
+                      placeholder="Brief explanation of the correct answer (AI generates if omitted)"
+                      maxLength={500}
+                      className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Optional additional instruction */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Additional Context (optional)
+              </label>
+              <input
+                type="text"
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                placeholder="e.g. Use STATEMENT format / Difficulty: Hard / Hindi first"
+                maxLength={500}
+                className="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Repair mode + instruction — AI Generate only */}
+        {replacementMethod === 'AI_GENERATE' && (
+          <>
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-2">Repair Mode</p>
+              {hasReplaceFirst ? (
+                /* Only REPLACE available — show single non-interactive indicator */
+                <div className="flex gap-2">
+                  <div className="flex-1 text-sm font-semibold py-2 rounded-lg border bg-brand-600 text-white border-brand-600 text-center cursor-default">
+                    ↺ Replace with New
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  {(['AUTO_FIX', 'REPLACE'] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setMode(m)}
+                      className={`flex-1 text-sm font-semibold py-2 rounded-lg border transition-colors ${
+                        mode === m
+                          ? 'bg-brand-600 text-white border-brand-600'
+                          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace with New'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="text-xs text-slate-400 mt-1.5">
+                {isAdminEditorialReplace
+                  ? 'Generate a completely new question on the same topic. The existing question will be replaced.'
+                  : mode === 'AUTO_FIX'
+                  ? hasScopeFail
+                    ? 'Try to rewrite this question so it directly tests the declared topic scope. Use only if the learning objective can be preserved within scope.'
+                    : 'Rewrite the existing question to fix the issue, preserving the learning objective.'
+                  : hasScopeFail
+                    ? 'Discard this question and generate a completely new one strictly within the declared topic scope and exclusions.'
+                    : 'Discard the question and generate a fresh one on the same topic.'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">
+                Additional Instruction (optional)
+              </label>
+              <textarea
+                value={instruction}
+                onChange={(e) => setInstruction(e.target.value)}
+                rows={3}
+                maxLength={1000}
+                placeholder={
+                  isAdminEditorialReplace
+                    ? 'e.g. Make it harder / Use a statement-based format / Avoid direct factual recall / Use a different subtopic / Generate a conceptual question'
+                    : hasScopeFail
+                    ? 'e.g. Focus on INC sessions and presidential elections, not broader independence movement.'
+                    : 'e.g. Keep the question focused on the topic — use a chronology format.'
+                }
+                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+              <p className="text-xs text-slate-400 mt-0.5">{instruction.length}/1000</p>
+            </div>
+
+            {topicAdherenceMode && (
+              <p className="text-xs text-slate-400">
+                Topic Adherence Mode:{' '}
+                <span className={`font-semibold ${topicAdherenceMode === 'STRICT' ? 'text-amber-700' : 'text-slate-600'}`}>
+                  {topicAdherenceMode}
+                </span>
+                {topicAdherenceMode === 'STRICT' && ' — repaired question will be re-validated for scope compliance.'}
+              </p>
+            )}
+          </>
         )}
 
         {/* Error */}
@@ -338,7 +538,13 @@ function RepairModal({
             disabled={repairing}
             className="flex-1 bg-brand-600 hover:bg-brand-700 text-white text-sm font-bold py-2.5 rounded-lg disabled:opacity-50 transition-colors"
           >
-            {repairing ? 'Repairing…' : mode === 'AUTO_FIX' ? '✏ Auto Fix' : '↺ Replace Question'}
+            {repairing
+              ? 'Replacing…'
+              : replacementMethod === 'ADMIN_QUESTION'
+              ? '✏ Use My Question'
+              : mode === 'AUTO_FIX'
+              ? '✏ Auto Fix'
+              : '↺ Replace Question'}
           </button>
           <button
             onClick={onClose}

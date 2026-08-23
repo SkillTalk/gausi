@@ -1,23 +1,53 @@
 /**
  * Prompt builder for the single-question repair AI call.
  *
- * Two repair modes:
- *   AUTO_FIX — Rewrite the existing question to fix the validator issue while
- *              preserving the original learning objective.
- *   REPLACE  — Discard the question entirely and generate a fresh question on
- *              the same topic/category/difficulty.
+ * Repair modes:
+ *   AUTO_FIX    — Rewrite the existing question to fix the validator issue while
+ *                 preserving the original learning objective.
+ *   REPLACE     — Discard the question entirely and generate a fresh question on
+ *                 the same topic/category/difficulty.
+ *   MANUAL      — Admin provides the full replacement question as JSON.
+ *                 No AI call. Data is validated deterministically and saved directly.
+ *   ADMIN_SEED  — Admin provides the desired question text (and optionally options /
+ *                 correct answer). AI completes the bilingual MCQ structure while
+ *                 preserving the admin's question content verbatim. The admin-provided
+ *                 text is authoritative and must not be replaced with a different question.
  *
  * Server-only. Never import in client components.
  */
 
 import type { ValidationIssue } from '@/types/validation';
 
+export type RepairMode = 'AUTO_FIX' | 'REPLACE' | 'MANUAL' | 'ADMIN_SEED';
+
 /**
- * MANUAL: admin provides the full replacement question as JSON in adminInstruction.
- * No AI call is made. Data is validated deterministically and saved directly.
- * Useful when the AI repair consistently misinterprets or regenerates the wrong type.
+ * Partial question data provided by the admin in ADMIN_SEED mode.
+ * At least one of questionText / questionEn / questionHi must be present.
+ *
+ * The AI will:
+ *   - Use the provided question text verbatim (translate if only one language given).
+ *   - Use provided options/correctOption exactly if present; generate if absent.
+ *   - Generate bilingual explanations consistent with the correctOption.
+ *
+ * The admin's question text is authoritative. AI must not silently change it.
  */
-export type RepairMode = 'AUTO_FIX' | 'REPLACE' | 'MANUAL';
+export type AdminQuestionSeed = {
+  /** Plain question text — may be in English or Hindi or both. */
+  questionText?: string;
+  questionHi?: string;
+  questionEn?: string;
+  /** Optional pre-filled options (English). AI generates missing ones. */
+  optionA?: string;
+  optionB?: string;
+  optionC?: string;
+  optionD?: string;
+  /** Optional correct answer (A–D). AI determines if omitted. Never E. */
+  correctOption?: string;
+  /** Optional explanation (English). AI generates if omitted. */
+  explanation?: string;
+  /** Optional question type hint. Defaults to same type as existing question. */
+  questionType?: string;
+};
 
 export type RepairPromptContext = {
   exam: string;
@@ -59,6 +89,13 @@ export type RepairPromptContext = {
 
   repairMode: RepairMode;
   adminInstruction: string | null;
+
+  /**
+   * ADMIN_SEED mode only.
+   * Admin-provided partial question data. AI completes missing fields.
+   * The admin's question text is authoritative — AI must not substitute a different question.
+   */
+  adminQuestion?: AdminQuestionSeed | null;
 };
 
 // The JSON shape the AI must return for a single repaired question.
@@ -175,6 +212,70 @@ export function buildRepairUserPrompt(ctx: RepairPromptContext): string {
     if (ctx.question.questionType === 'ASSERTION_REASON') {
       lines.push('For ASSERTION_REASON: use the exact standard Hindi/English option texts.');
     }
+  } else if (ctx.repairMode === 'ADMIN_SEED') {
+    // ── ADMIN_SEED: admin provides question content; AI completes missing fields ──
+    const seed = ctx.adminQuestion;
+    const seedText = seed?.questionText ?? seed?.questionEn ?? seed?.questionHi ?? '';
+
+    lines.push('─── Admin-Seeded Replacement ───');
+    lines.push('The admin has provided a question they want to use. Your role is to complete');
+    lines.push('the full bilingual MCQ structure while preserving the admin\'s content exactly.');
+    lines.push('');
+    lines.push('⚠️  CRITICAL AUTHORITY RULE:');
+    lines.push('  - The admin\'s question text is AUTHORITATIVE — use it verbatim.');
+    lines.push('  - Do NOT change the question into a different question.');
+    lines.push('  - Do NOT rephrase, simplify, or replace it with a "safer" alternative.');
+    lines.push('  - If translation is needed, translate accurately and naturally.');
+    lines.push('  - If options are provided, use them exactly. Do not swap or alter them.');
+    lines.push('  - If correctOption is provided, treat it as the definitive answer.');
+    lines.push('  - Only generate/infer fields that the admin did not provide.');
+    lines.push('');
+
+    if (seedText) {
+      lines.push('─── Admin Question Text ───');
+      lines.push(seedText);
+      lines.push('');
+    }
+    if (seed?.questionHi && seed.questionHi !== seedText) {
+      lines.push(`Admin Hindi: ${seed.questionHi}`);
+    }
+    if (seed?.questionEn && seed.questionEn !== seedText) {
+      lines.push(`Admin English: ${seed.questionEn}`);
+    }
+
+    const hasOptions = seed?.optionA || seed?.optionB || seed?.optionC || seed?.optionD;
+    if (hasOptions) {
+      lines.push('─── Admin-Provided Options ───');
+      if (seed?.optionA) lines.push(`Option A: ${seed.optionA}`);
+      if (seed?.optionB) lines.push(`Option B: ${seed.optionB}`);
+      if (seed?.optionC) lines.push(`Option C: ${seed.optionC}`);
+      if (seed?.optionD) lines.push(`Option D: ${seed.optionD}`);
+      lines.push('');
+    }
+
+    if (seed?.correctOption && ['A', 'B', 'C', 'D'].includes(seed.correctOption.toUpperCase())) {
+      lines.push(`Admin Correct Answer: ${seed.correctOption.toUpperCase()}`);
+      lines.push('⚠️  Treat this as the definitive correct answer. Do NOT override it.');
+      lines.push('');
+    }
+
+    if (seed?.explanation) {
+      lines.push(`Admin Explanation: ${seed.explanation}`);
+      lines.push('');
+    }
+
+    const preferredType = seed?.questionType ?? ctx.question.questionType;
+    lines.push('─── Completion Instructions ───');
+    lines.push(`Preferred question type: ${preferredType} (use DIRECT if this type does not fit admin\'s content).`);
+    lines.push('Complete ALL missing fields in the required JSON schema:');
+    lines.push('  - questionHi: Accurate Hindi translation of the admin\'s question (if not provided).');
+    lines.push('  - questionEn: Accurate English translation (if not provided).');
+    lines.push('  - optionAHi–optionDHi: Hindi translations of A–D (generate missing options too).');
+    lines.push('  - optionAEn–optionDEn: English options A–D.');
+    lines.push('  - correctOption: The correct answer A–D (use admin\'s if provided; determine otherwise).');
+    lines.push('  - explanationHi / explanationEn: 1–2 sentence explanation justifying the correct answer.');
+    lines.push('Ensure exactly 4 options A–D, each non-empty and non-duplicate.');
+
   } else {
     // REPLACE
     const isScopeFail = ctx.validatorIssues.some((i) => i.type === 'TOPIC_SCOPE_FAIL');

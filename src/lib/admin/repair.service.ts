@@ -21,6 +21,7 @@ import {
   buildRepairUserPrompt,
   type RepairMode,
   type RepairPromptContext,
+  type AdminQuestionSeed,
 } from '@/lib/admin/repair-prompt';
 import { QUESTION_TYPES } from '@/types/generated-test';
 import type { ValidationIssue } from '@/types/validation';
@@ -36,6 +37,8 @@ const REPAIRABLE_STATUSES = new Set([
   'READY',
   'VALIDATING', // allow repair even if validation is in progress (admin UI should warn)
 ]);
+
+export type { AdminQuestionSeed };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +144,7 @@ export async function repairQuestion(
   repairMode: RepairMode,
   adminInstruction: string | undefined,
   apiKey: string,
+  adminQuestion?: AdminQuestionSeed | null,
 ): Promise<RepairResult> {
   // ── 1. Load test + all questions ─────────────────────────────────────────
   let test: {
@@ -255,11 +259,24 @@ export async function repairQuestion(
     // Validation result unavailable — proceed without context.
   }
 
+  // ADMIN_SEED: validate that at least a question text was provided
+  if (repairMode === 'ADMIN_SEED') {
+    const seed = adminQuestion;
+    const hasText = !!(seed?.questionText?.trim() || seed?.questionEn?.trim() || seed?.questionHi?.trim());
+    if (!hasText) {
+      return {
+        ok: false,
+        error: 'ADMIN_SEED mode requires at least a question text (questionText, questionEn, or questionHi).',
+        stage: 'MANUAL_PARSE',
+      };
+    }
+  }
+
   // PASS question rules:
-  //   REPLACE → allowed (admin editorial override — question may be too easy, repetitive, etc.)
+  //   REPLACE / ADMIN_SEED → allowed (admin editorial override)
   //   AUTO_FIX → blocked (nothing to fix in a passing question)
-  //   MANUAL → blocked (MANUAL is for broken content; use REPLACE for editorial changes)
-  if (qValStatus === 'PASS' && repairMode !== 'REPLACE') {
+  //   MANUAL → blocked (MANUAL is for broken content; use REPLACE/ADMIN_SEED for editorial changes)
+  if (qValStatus === 'PASS' && repairMode !== 'REPLACE' && repairMode !== 'ADMIN_SEED') {
     return {
       ok: false,
       error:
@@ -295,6 +312,7 @@ export async function repairQuestion(
     existingQuestionTexts: existingTexts,
     repairMode,
     adminInstruction: adminInstruction ?? null,
+    adminQuestion: adminQuestion ?? null,
   };
 
   // ── 7. MANUAL mode: parse adminInstruction as JSON, skip AI ─────────────

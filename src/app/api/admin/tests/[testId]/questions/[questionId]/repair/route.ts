@@ -17,9 +17,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { repairQuestion, type RepairMode } from '@/lib/admin/repair.service';
+import { repairQuestion, type RepairMode, type AdminQuestionSeed } from '@/lib/admin/repair.service';
 
-const VALID_REPAIR_MODES: RepairMode[] = ['AUTO_FIX', 'REPLACE', 'MANUAL'];
+const VALID_REPAIR_MODES: RepairMode[] = ['AUTO_FIX', 'REPLACE', 'MANUAL', 'ADMIN_SEED'];
 
 type Params = { params: Promise<{ testId: string; questionId: string }> };
 
@@ -59,13 +59,39 @@ export async function POST(request: Request, { params }: Params) {
 
   // Guard: instruction length limit.
   // MANUAL mode passes full question JSON (no AI call) — allow up to 8000 chars.
-  // AUTO_FIX / REPLACE pass a human hint — limit to 500 chars.
-  const maxInstructionLength = repairMode === 'MANUAL' ? 8000 : 500;
+  // AUTO_FIX / REPLACE / ADMIN_SEED pass a human hint — limit to 1000 chars.
+  const maxInstructionLength = repairMode === 'MANUAL' ? 8000 : 1000;
   if (instruction && instruction.length > maxInstructionLength) {
     return NextResponse.json(
       { error: `instruction must be ${maxInstructionLength} characters or fewer for ${repairMode} mode.` },
       { status: 400 },
     );
+  }
+
+  // Parse adminQuestion for ADMIN_SEED mode
+  let adminQuestion: AdminQuestionSeed | null = null;
+  if (repairMode === 'ADMIN_SEED') {
+    const raw = b.adminQuestion;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const q = raw as Record<string, unknown>;
+      adminQuestion = {
+        questionText: typeof q.questionText === 'string' ? q.questionText.trim() : undefined,
+        questionHi:   typeof q.questionHi   === 'string' ? q.questionHi.trim()   : undefined,
+        questionEn:   typeof q.questionEn   === 'string' ? q.questionEn.trim()   : undefined,
+        optionA:      typeof q.optionA      === 'string' ? q.optionA.trim()      : undefined,
+        optionB:      typeof q.optionB      === 'string' ? q.optionB.trim()      : undefined,
+        optionC:      typeof q.optionC      === 'string' ? q.optionC.trim()      : undefined,
+        optionD:      typeof q.optionD      === 'string' ? q.optionD.trim()      : undefined,
+        correctOption:typeof q.correctOption=== 'string' ? q.correctOption.trim().toUpperCase() : undefined,
+        explanation:  typeof q.explanation  === 'string' ? q.explanation.trim()  : undefined,
+        questionType: typeof q.questionType === 'string' ? q.questionType.trim() : undefined,
+      };
+    } else {
+      return NextResponse.json(
+        { error: 'ADMIN_SEED mode requires an adminQuestion object with at least questionText, questionEn, or questionHi.' },
+        { status: 400 },
+      );
+    }
   }
 
   const result = await repairQuestion(
@@ -74,6 +100,7 @@ export async function POST(request: Request, { params }: Params) {
     repairMode as RepairMode,
     instruction,
     apiKey,
+    adminQuestion,
   );
 
   if (!result.ok) {

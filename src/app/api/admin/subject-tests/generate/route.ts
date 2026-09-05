@@ -36,8 +36,8 @@ function validateSubjectTestInput(body: unknown): { valid: true; input: Generate
   if (!VALID_DIFFS.includes(difficulty)) return { valid: false, error: 'Invalid difficulty.' };
 
   const totalQuestions = Number(b.totalQuestions);
-  if (!Number.isInteger(totalQuestions) || totalQuestions < 1 || totalQuestions > 50) {
-    return { valid: false, error: 'totalQuestions must be 1–50.' };
+  if (!Number.isInteger(totalQuestions) || totalQuestions < 1 || totalQuestions > 200) {
+    return { valid: false, error: 'totalQuestions must be 1–200.' };
   }
 
   const durationMinutes = Number(b.durationMinutes);

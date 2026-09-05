@@ -5,6 +5,10 @@ import { tre4Tests } from '@/content/exams/tre4/tests';
 import { tre4TopicGroups } from '@/content/exams/tre4/topics';
 import { siteConfig } from '@/content/site';
 import { MotionSection } from '@/components/MotionSection';
+import { getPublishedDbTests } from '@/lib/test-provider';
+
+// ISR — same 60 s window as /tre4 and /tre4/daily
+export const revalidate = 60;
 
 export const metadata: Metadata = {
   title: 'GAUSI | Government Exam Preparation',
@@ -12,10 +16,33 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 };
 
-export default function HomePage() {
-  const latestTest = [...tre4Tests].sort(
+export default async function HomePage() {
+  // Merge static + DB published tests (newest first), same pattern as /tre4
+  type TestCard = {
+    id: string; slug: string; date: string; title: string; titleHi: string;
+    subject: string; totalQuestions: number; durationMinutes: number; difficulty: string;
+  };
+
+  let dbTests: TestCard[] = [];
+  try {
+    dbTests = await getPublishedDbTests({ exam: 'BPSC TRE 4' });
+  } catch { /* DB unavailable — degrade gracefully */ }
+
+  const staticCards: TestCard[] = tre4Tests.map((t) => ({
+    id: t.id, slug: t.slug, date: t.date, title: t.title, titleHi: t.titleHi,
+    subject: t.subject, totalQuestions: t.config.totalQuestions,
+    durationMinutes: t.config.durationMinutes, difficulty: t.difficulty,
+  }));
+
+  const allBySlug = new Map<string, TestCard>();
+  for (const t of staticCards) allBySlug.set(t.slug, t);
+  for (const t of dbTests) allBySlug.set(t.slug, t);
+  const allSorted = [...allBySlug.values()].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  )[0];
+  );
+
+  const latestTest = allSorted[0] ?? null;
+  const recentTests = allSorted.slice(0, 5);
 
   return (
     <div className="overflow-x-hidden">
@@ -103,8 +130,8 @@ export default function HomePage() {
                 <h3 className="text-xl font-extrabold text-slate-900">{latestTest.title}</h3>
                 <p className="text-slate-500 mt-0.5">{latestTest.titleHi}</p>
                 <div className="flex gap-3 mt-2 text-sm text-slate-500">
-                  <span>📝 {latestTest.config.totalQuestions} Questions</span>
-                  <span>⏱ {latestTest.config.durationMinutes} Minutes</span>
+                  <span>📝 {latestTest.totalQuestions} Questions</span>
+                  <span>⏱ {latestTest.durationMinutes} Minutes</span>
                   <span>🌐 Hindi & English</span>
                 </div>
               </div>
@@ -154,10 +181,7 @@ export default function HomePage() {
         </MotionSection>
 
         <div className="flex flex-col gap-3">
-          {[...tre4Tests]
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 5)
-            .map((test, i) => (
+          {recentTests.map((test, i) => (
               <MotionSection key={test.id} delay={i * 0.07}>
                 <div className="card-hover p-4 flex items-center gap-4">
                   <div className="text-xs text-slate-400 shrink-0 w-20">
@@ -165,7 +189,7 @@ export default function HomePage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-slate-800 truncate">{test.title}</div>
-                    <div className="text-xs text-slate-500">{test.config.totalQuestions}Q • {test.config.durationMinutes} min • {test.difficulty}</div>
+                    <div className="text-xs text-slate-500">{test.totalQuestions}Q • {test.durationMinutes} min • {test.difficulty}</div>
                   </div>
                   <Link href={`/tre4/${test.slug}/instructions`} className="btn-secondary text-xs py-1.5 px-3 whitespace-nowrap shrink-0">
                     Start

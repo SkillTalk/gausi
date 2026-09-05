@@ -16,7 +16,9 @@ const RESULT_KEY = 'exam-result-';
 
 type SaveStatus = 'saving' | 'saved' | 'failed' | 'no-identity';
 
-async function postAttempt(pending: PendingSubmission): Promise<string | null> {
+type AttemptSaveResult = { id: string; attemptNumber: number };
+
+async function postAttempt(pending: PendingSubmission): Promise<AttemptSaveResult | null> {
   try {
     const res = await fetch('/api/attempts', {
       method: 'POST',
@@ -34,8 +36,9 @@ async function postAttempt(pending: PendingSubmission): Promise<string | null> {
       }),
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as { id: string };
-    return data.id ?? null;
+    const data = (await res.json()) as { id: string; attemptNumber?: number };
+    if (!data.id) return null;
+    return { id: data.id, attemptNumber: data.attemptNumber ?? 1 };
   } catch {
     return null;
   }
@@ -49,6 +52,7 @@ export default function ResultPage({ params }: PageProps) {
   const [showReview, setShowReview] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [attemptNumber, setAttemptNumber] = useState<number | null>(null);
   const [pendingAttempt, setPendingAttempt] = useState<PendingSubmission | null>(null);
   const hasAiKey = Boolean(process.env.NEXT_PUBLIC_AI_EXPLAIN_ENABLED);
 
@@ -70,9 +74,10 @@ export default function ResultPage({ params }: PageProps) {
     }
 
     setSaveStatus('saving');
-    postAttempt(pending).then((id) => {
-      if (id) {
-        setAttemptId(id);
+    postAttempt(pending).then((saved) => {
+      if (saved) {
+        setAttemptId(saved.id);
+        setAttemptNumber(saved.attemptNumber);
         setSaveStatus('saved');
         clearPendingAttempt();
       } else {
@@ -84,9 +89,10 @@ export default function ResultPage({ params }: PageProps) {
   const handleRetrySave = useCallback(async () => {
     if (!pendingAttempt) return;
     setSaveStatus('saving');
-    const id = await postAttempt(pendingAttempt);
-    if (id) {
-      setAttemptId(id);
+    const saved = await postAttempt(pendingAttempt);
+    if (saved) {
+      setAttemptId(saved.id);
+      setAttemptNumber(saved.attemptNumber);
       setSaveStatus('saved');
       clearPendingAttempt();
     } else {
@@ -131,7 +137,14 @@ export default function ResultPage({ params }: PageProps) {
 
         <div className="mb-6">
           <h1 className="text-2xl font-extrabold text-slate-900">{test.title}</h1>
-          <p className="text-sm text-slate-500 mt-1">{test.subject} • {test.date}</p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <p className="text-sm text-slate-500">{test.subject} • {test.date}</p>
+            {attemptNumber !== null && (
+              <span className="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-700 border border-brand-200">
+                #{attemptNumber} Attempt
+              </span>
+            )}
+          </div>
         </div>
 
         {/* DB save status banner */}

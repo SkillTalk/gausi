@@ -258,7 +258,14 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
 
-    return NextResponse.json({ id: attempt.id }, { status: 201 });
+    // Count total attempts by this user on this test (includes the one just created).
+    // This gives us the 1-based attemptNumber without a second DB round-trip on the
+    // ordered list; uses the composite index (userId, testId).
+    const attemptNumber = await db.testAttempt.count({
+      where: { userId: b.userId, testId: test.id },
+    });
+
+    return NextResponse.json({ id: attempt.id, attemptNumber }, { status: 201 });
   } catch (err) {
     console.error('[POST /api/attempts] DB error', err instanceof Error ? err.message : err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

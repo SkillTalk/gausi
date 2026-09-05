@@ -9,6 +9,7 @@ export const revalidate = 60;
 export const metadata: Metadata = {
   title: 'Daily Practice Tests — BPSC TRE 4',
   description: 'Date-wise daily practice tests for BPSC TRE 4. New test every day covering History, Geography, Science and more.',
+  alternates: { canonical: '/tre4/daily' },
 };
 
 const DIFFICULTY_COLOUR: Record<string, string> = {

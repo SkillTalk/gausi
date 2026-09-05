@@ -16,6 +16,9 @@
  */
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+// Automation runs: topic selection + generate (~90 s) + validate + schedule/publish.
+// Total is typically 120–200 s — must be explicit to avoid platform defaults.
+export const maxDuration = 300;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { runAutomation } from '@/lib/admin/automation.service';

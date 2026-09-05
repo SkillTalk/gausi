@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Terms',
-  description: 'GAUSI terms of service — Government Aspirants\' Unified Study Institute.'
+  title: 'Terms of Use — GAUSI',
+  description: 'GAUSI terms of service — Government Aspirants\' Unified Study Institute.',
+  alternates: { canonical: '/terms' },
 };
 
 export default function TermsPage() {

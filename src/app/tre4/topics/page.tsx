@@ -29,12 +29,14 @@ export async function generateMetadata({
     return {
       title: `${group.label} Practice — BPSC TRE 4`,
       description: `Practice BPSC TRE 4 ${group.label} topic-wise MCQs in Hindi & English.`,
+      alternates: { canonical: '/tre4/topics' },
     };
   }
   return {
     title: 'Topic-wise Practice — BPSC TRE 4',
     description:
       'Practice BPSC TRE 4 topic-wise: History, Geography, Science, Mathematics and more in Hindi & English.',
+    alternates: { canonical: '/tre4/topics' },
   };
 }
 

@@ -100,7 +100,17 @@ export default function AdminTestsPage() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json() as { testId?: string; error?: string; details?: unknown };
+      // Decouple JSON parsing from the outer catch so a non-JSON platform error
+      // (e.g. Vercel infrastructure response) is shown with its HTTP status rather
+      // than silently collapsed to "Network error".
+      let data: { testId?: string; error?: string; details?: unknown } = {};
+      try {
+        data = await res.json() as typeof data;
+      } catch {
+        // Body is not JSON — platform/infrastructure error
+        setGenError(`Server error (HTTP ${res.status}). Check Vercel logs for details.`);
+        return;
+      }
 
       if (!res.ok || !data.testId) {
         setGenError(data.error ?? 'Generation failed. Please try again.');
@@ -110,7 +120,7 @@ export default function AdminTestsPage() {
       // Navigate to preview on success
       router.push(`/admin/tests/${data.testId}`);
     } catch {
-      setGenError('Network error. Please try again.');
+      setGenError('Request failed. Check your network connection and try again.');
     } finally {
       setGenerating(false);
     }

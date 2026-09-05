@@ -39,9 +39,6 @@ export const metadata: Metadata = {
     description: siteConfig.description,
     images: [siteConfig.ogImage],
   },
-  alternates: {
-    canonical: '/',
-  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -40,6 +40,10 @@ export async function generateTest(
   input: GenerateTestInput,
   apiKey: string,
 ): Promise<GenerationResult> {
+  const reqStart = Date.now();
+  // Short correlation prefix for log correlation across stages
+  const corrId = `gen-${Date.now().toString(36)}`;
+
   // 1. Create GENERATING record
   const slug = generateTestSlug(input.category, input.topic);
   let testId: string;
@@ -66,15 +70,19 @@ export async function generateTest(
       },
     });
     testId = created.id;
+    console.log(`[${corrId}:${testId}] SETUP done | +${Date.now() - reqStart}ms`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'DB create failed';
-    console.error('[GEN_SVC] Failed to create test record:', msg);
+    console.error(`[${corrId}] SETUP failed | +${Date.now() - reqStart}ms | ${msg}`);
     return { ok: false, error: `Failed to create test record: ${msg}`, stage: 'SETUP' };
   }
 
   const startMs = Date.now();
 
   // 2. Call OpenAI
+  console.log(
+    `[${corrId}:${testId}] AI_GENERATION start | model=${OPENAI_MODEL} | max_tokens=16000 | q=${input.totalQuestions} | diff=${input.difficulty}`,
+  );
   let aiResult: AIGenerationResult;
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -103,14 +111,18 @@ export async function generateTest(
     type OAResp = { choices: Array<{ message: { content: string } }> };
     const data = await response.json() as OAResp;
     const raw = data.choices?.[0]?.message?.content ?? '';
+    const aiElapsed = Date.now() - startMs;
+    console.log(`[${corrId}:${testId}] AI_GENERATION done | +${aiElapsed}ms | rawLen=${raw.length}`);
     try {
       aiResult = JSON.parse(raw) as AIGenerationResult;
+      console.log(`[${corrId}:${testId}] AI_RESPONSE_PARSE ok | +${Date.now() - reqStart}ms`);
     } catch {
+      console.error(`[${corrId}:${testId}] AI_RESPONSE_PARSE failed | +${Date.now() - reqStart}ms | invalid JSON`);
       throw new Error('OpenAI returned invalid JSON.');
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'AI call failed';
-    console.error(`[GEN_SVC:${testId}] OpenAI failure:`, msg);
+    console.error(`[${corrId}:${testId}] AI_GENERATION failed | +${Date.now() - reqStart}ms | ${msg}`);
     await markFailed(testId, msg);
     return { ok: false, error: msg, stage: 'AI_CALL' };
   }
@@ -121,7 +133,7 @@ export async function generateTest(
   const structVal = validateAIOutput(aiResult, input.totalQuestions);
   if (!structVal.valid) {
     const errMsg = structVal.errors.map((e) => `${e.field}: ${e.message}`).join('; ');
-    console.error(`[GEN_SVC:${testId}] Structural validation failed:`, errMsg);
+    console.error(`[${corrId}:${testId}] AI_RESPONSE_PARSE schema-invalid | +${Date.now() - reqStart}ms | ${errMsg}`);
     await markFailed(testId, `Schema validation failed: ${errMsg}`);
     return { ok: false, error: `AI output schema validation failed: ${errMsg}`, stage: 'AI_CALL' };
   }
@@ -168,13 +180,13 @@ export async function generateTest(
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'DB write failed';
-    console.error(`[GEN_SVC:${testId}] DB write failed:`, msg);
+    console.error(`[${corrId}:${testId}] DATABASE_SAVE failed | +${Date.now() - reqStart}ms | ${msg}`);
     await db.generatedQuestion.deleteMany({ where: { testId } }).catch(() => {});
     await markFailed(testId, `DB write failed: ${msg}`);
     return { ok: false, error: `Failed to save questions: ${msg}`, stage: 'DB_WRITE' };
   }
 
-  console.log(`[GEN_SVC:${testId}] ✅ ${input.totalQuestions}q | "${input.topic}" | ${generationMs}ms`);
+  console.log(`[${corrId}:${testId}] DATABASE_SAVE ok | ✅ ${input.totalQuestions}q | "${input.topic}" | total=${Date.now() - reqStart}ms (ai=${generationMs}ms)`);
   return { ok: true, testId, slug, generationMs };
 }
 

@@ -111,6 +111,8 @@ export default function HistoricalResultPage({ params }: PageProps) {
   const [fetchState, setFetchState] = useState<FetchState>('loading');
   const [lang, setLang] = useState<Lang>('hi');
   const [showWrong, setShowWrong] = useState(false);
+  // Questions for DB-generated tests (not in static content)
+  const [dynamicQuestions, setDynamicQuestions] = useState<Question[]>([]);
 
   useEffect(() => {
     fetch(`/api/attempts/${attemptId}`)
@@ -123,6 +125,23 @@ export default function HistoricalResultPage({ params }: PageProps) {
       })
       .catch(() => setFetchState('error'));
   }, [attemptId]);
+
+  // For DB-generated tests: fetch question definitions so the review panel
+  // can show question text, options and explanations. Static tests already
+  // have their definitions in tre4TestsBySlug so no fetch is needed there.
+  useEffect(() => {
+    if (!attempt) return;
+    if (Object.values(tre4TestsBySlug).some((t) => t.id === attempt.testId)) return;
+    fetch(`/api/tests/${attempt.testSlug}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json() as { test?: { questions?: Question[] } };
+        if (Array.isArray(data.test?.questions)) {
+          setDynamicQuestions(data.test!.questions!);
+        }
+      })
+      .catch(() => {}); // silently degrade — cards show "no longer available"
+  }, [attempt]);
 
   if (fetchState === 'loading') {
     return (
@@ -150,10 +169,10 @@ export default function HistoricalResultPage({ params }: PageProps) {
     );
   }
 
-  // Try to find the static test definition for question text
-  const test = Object.values(tre4TestsBySlug).find((t) => t.id === attempt.testId);
+  // Static-content test (for static tests). DB tests are covered by dynamicQuestions.
+  const staticTest = Object.values(tre4TestsBySlug).find((t) => t.id === attempt.testId);
   const questionMap = new Map<string, Question>(
-    (test?.questions ?? []).map((q) => [q.id, q])
+    (staticTest?.questions ?? dynamicQuestions).map((q) => [q.id, q])
   );
 
   const answers = attempt.answers as AnswerSnapshot[];
@@ -279,11 +298,9 @@ export default function HistoricalResultPage({ params }: PageProps) {
           <Link href="/tre4/history" className="btn-secondary flex-1 text-center">
             ← All History
           </Link>
-          {test && (
-            <Link href={`/tre4/${test.slug}/instructions`} className="btn-primary flex-1 text-center">
-              Retry This Test
-            </Link>
-          )}
+          <Link href={`/tre4/${attempt.testSlug}/instructions`} className="btn-primary flex-1 text-center">
+            Retry This Test
+          </Link>
         </div>
       </div>
     </div>

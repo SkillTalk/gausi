@@ -2,7 +2,8 @@ import { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy',
-  description: 'GAUSI privacy policy — Government Aspirants\' Unified Study Institute.'
+  description: 'GAUSI privacy policy — Government Aspirants\' Unified Study Institute.',
+  alternates: { canonical: '/privacy' },
 };
 
 export default function PrivacyPage() {

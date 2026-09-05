@@ -9,6 +9,7 @@ import { MotionSection } from '@/components/MotionSection';
 export const metadata: Metadata = {
   title: 'GAUSI | Government Exam Preparation',
   description: siteConfig.description,
+  alternates: { canonical: '/' },
 };
 
 export default function HomePage() {

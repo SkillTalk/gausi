@@ -147,6 +147,29 @@ export default async function HomePage() {
       <section className="bg-slate-50 py-14">
         <div className="container">
           <MotionSection>
+            {/* Two navigation options side by side */}
+            <div className="flex flex-col sm:flex-row gap-3 mb-8">
+              <Link
+                href="/tre4/topics"
+                className="flex-1 flex items-center gap-3 bg-white border-2 border-brand-200 hover:border-brand-400 rounded-2xl px-5 py-4 transition-all hover:shadow-md group"
+              >
+                <span className="text-2xl">📚</span>
+                <div>
+                  <p className="font-bold text-slate-800 group-hover:text-brand-700">Topic-wise Practice</p>
+                  <p className="text-xs text-slate-500">History, Geography, Science & more</p>
+                </div>
+              </Link>
+              <Link
+                href="/tre4/subjects"
+                className="flex-1 flex items-center gap-3 bg-white border-2 border-purple-200 hover:border-purple-400 rounded-2xl px-5 py-4 transition-all hover:shadow-md group"
+              >
+                <span className="text-2xl">🗂️</span>
+                <div>
+                  <p className="font-bold text-slate-800 group-hover:text-purple-700">Subject-wise Tests</p>
+                  <p className="text-xs text-slate-500">Music, English, CS, Hindi & more</p>
+                </div>
+              </Link>
+            </div>
             <h2 className="text-2xl font-bold text-slate-900 mb-2">Topic-wise Practice</h2>
             <p className="text-slate-500 mb-8">Choose your subject and practise at your own pace.</p>
           </MotionSection>

@@ -450,12 +450,14 @@ export async function generateSubjectTest(
     opts?.onBatchComplete?.(batchNum, allQuestions.length);
   }
 
-  // ── 3. Cross-batch literal duplicate check ────────────────────────────────
-  const dupError = detectLiteralDuplicates(allQuestions);
-  if (dupError) {
-    console.error(`[${corrId}:${testId}] DUPLICATE_CHECK failed | ${dupError}`);
-    await markFailed(testId, dupError);
-    return { ok: false, error: dupError, stage: 'AI_CALL' };
+  // ── 3. Cross-batch literal duplicate check (warning only) ───────────────────
+  // Duplicates do NOT abort generation — they are rare, cosmetic, and can be
+  // caught later by Agent 2 validation (NEAR_DUPLICATE / FAIL flags).
+  // Failing the full 4-batch run over a single duplicate wastes 3-4 minutes of
+  // generation time and forces a full retry.
+  const dupWarning = detectLiteralDuplicates(allQuestions);
+  if (dupWarning) {
+    console.warn(`[${corrId}:${testId}] DUPLICATE_CHECK warning (non-fatal) | ${dupWarning}`);
   }
 
   // ── 4. Final order validation: must be exactly 1–80 with no gaps ─────────

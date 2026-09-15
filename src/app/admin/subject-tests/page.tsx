@@ -56,6 +56,7 @@ export default function AdminSubjectTestsPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [publishingId, setPublishingId] = useState<string | null>(null);
 
   const loadTests = useCallback(async () => {
     setLoading(true);
@@ -137,6 +138,24 @@ export default function AdminSubjectTestsPage() {
     } else {
       setDeleteId(testId);
       setTimeout(() => setDeleteId(null), 4000);
+    }
+  }
+
+  async function handlePublishDirect(testId: string) {
+    if (!window.confirm('Publish without validation? The test will go live immediately.')) return;
+    setPublishingId(testId);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/publish-direct`, { method: 'POST' });
+      const data = await res.json() as { error?: string };
+      if (res.ok) {
+        await loadTests();
+      } else {
+        alert(data.error ?? 'Publish failed.');
+      }
+    } catch {
+      alert('Network error. Please try again.');
+    } finally {
+      setPublishingId(null);
     }
   }
 
@@ -372,6 +391,18 @@ export default function AdminSubjectTestsPage() {
                   >
                     View →
                   </Link>
+                  {['GENERATED', 'VALIDATION_FAILED'].includes(test.status) && (
+                    <button
+                      onClick={() => void handlePublishDirect(test.id)}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors border ${
+                        publishingId === test.id
+                          ? 'bg-amber-500 text-white border-amber-500 opacity-70'
+                          : 'bg-amber-50 text-amber-700 border-amber-300 hover:bg-amber-100'
+                      }`}
+                    >
+                      {publishingId === test.id ? 'Publishing…' : '⚡ Publish'}
+                    </button>
+                  )}
                   <button
                     onClick={() => void handleDelete(test.id)}
                     className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors border ${

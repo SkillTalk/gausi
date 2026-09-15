@@ -105,6 +105,51 @@ export async function publishTest(testId: string): Promise<PublishResult<{ publi
   return { ok: true, data: { publishedAt } };
 }
 
+// ─── Publish direct (bypass validation) ──────────────────────────────────────
+
+/**
+ * Publish a test directly without running or requiring validation.
+ *
+ * Allowed from: GENERATED, VALIDATION_FAILED, READY, SCHEDULED.
+ * Not allowed from: DRAFT, GENERATING, VALIDATING, PUBLISHED, ARCHIVED.
+ *
+ * Use this when you trust the generated content and want to skip the
+ * validation step. The test goes live immediately.
+ */
+export async function publishTestDirect(testId: string): Promise<PublishResult<{ publishedAt: Date }>> {
+  const test = await db.generatedTest.findUnique({
+    where: { id: testId },
+    select: { id: true, status: true },
+  });
+
+  if (!test) {
+    return { ok: false, message: 'Test not found.', httpStatus: 404 };
+  }
+
+  const ALLOWED: string[] = ['GENERATED', 'VALIDATION_FAILED', 'READY', 'SCHEDULED'];
+  if (!ALLOWED.includes(test.status)) {
+    return {
+      ok: false,
+      message: `Cannot publish a test with status "${test.status}". Allowed: ${ALLOWED.join(', ')}.`,
+      httpStatus: 422,
+    };
+  }
+
+  const publishedAt = new Date();
+  await db.generatedTest.update({
+    where: { id: testId },
+    data: {
+      status: 'PUBLISHED',
+      publishedAt,
+      publishAt: null,
+    },
+  });
+
+  console.log(`[PUBLISH_DIRECT] ✅ testId=${testId} published (no validation) at ${publishedAt.toISOString()}`);
+  invalidatePublishedTestsCache();
+  return { ok: true, data: { publishedAt } };
+}
+
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export async function scheduleTest(

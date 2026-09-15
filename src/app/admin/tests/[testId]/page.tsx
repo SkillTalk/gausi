@@ -1225,6 +1225,26 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
     }
   }
 
+  async function handlePublishDirect() {
+    if (!window.confirm('Publish without validation? The test will go live immediately without running quality checks.')) return;
+    setPublishing(true);
+    setPublishMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tests/${testId}/publish-direct`, { method: 'POST' });
+      const data = await res.json() as { error?: string; publishedAt?: string };
+      if (res.ok) {
+        setPublishMsg({ ok: true, text: `Published (no validation) at ${data.publishedAt ? new Date(data.publishedAt).toLocaleString('en-IN') : 'now'}.` });
+        await reloadTest();
+      } else {
+        setPublishMsg({ ok: false, text: data.error ?? 'Publish failed.' });
+      }
+    } catch {
+      setPublishMsg({ ok: false, text: 'Network error.' });
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   async function handleSchedule() {
     if (!scheduleDate || !scheduleTime) {
       alert('Please enter a date and time.');
@@ -1342,6 +1362,7 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
   // allPassed = all questions validated AND every one is PASS (no FAIL/REVIEW)
   const allPassed = allCurrent && validation?.overallStatus === 'READY';
   const canPublishNow = ['READY', 'SCHEDULED'].includes(test.status);
+  const canPublishDirect = ['GENERATED', 'VALIDATION_FAILED'].includes(test.status);
   const canSchedule = test.status === 'READY';
   const canCancelSchedule = test.status === 'SCHEDULED';
   const canArchive = test.status === 'PUBLISHED';
@@ -1552,8 +1573,20 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               {canPublishNow && !isPublished && (
                 <p className="text-xs text-slate-500 mt-0.5">This test has passed validation and is ready to publish.</p>
               )}
+              {canPublishDirect && (
+                <p className="text-xs text-slate-500 mt-0.5">You can publish now (skipping validation) or validate first.</p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
+              {canPublishDirect && (
+                <button
+                  onClick={() => { void handlePublishDirect(); }}
+                  disabled={isOperationInProgress}
+                  className="text-sm font-semibold px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50"
+                >
+                  {publishing ? 'Publishing…' : '⚡ Publish without Validate'}
+                </button>
+              )}
               {canPublishNow && (
                 <button
                   onClick={() => { void handlePublishNow(); }}

@@ -7,6 +7,7 @@ import type { ExamResult, Lang, PendingSubmission } from '@/types/exam';
 import { ResultSummary } from '@/components/exam/ResultSummary';
 import { TopicBreakdown } from '@/components/exam/TopicBreakdown';
 import { WrongAnswerReview } from '@/components/exam/WrongAnswerReview';
+import { AllAnswerReview } from '@/components/exam/AllAnswerReview';
 import { LanguageSelector } from '@/components/exam/LanguageSelector';
 import { loadPendingAttempt, clearPendingAttempt } from '@/lib/exam/pending-attempt';
 
@@ -50,6 +51,7 @@ export default function ResultPage({ params }: PageProps) {
   const [result, setResult] = useState<ExamResult | null>(null);
   const [lang, setLang] = useState<Lang>('hi');
   const [showReview, setShowReview] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
   const [attemptNumber, setAttemptNumber] = useState<number | null>(null);
@@ -204,6 +206,26 @@ export default function ResultPage({ params }: PageProps) {
             )}
           </div>
         )}
+
+        {/* View all answers */}
+        <div className="mt-6">
+          <button
+            onClick={() => setShowAll((v) => !v)}
+            className="btn-secondary w-full py-3"
+          >
+            {showAll ? 'Hide' : 'View'} All Answers ({result.questions.length})
+          </button>
+
+          {showAll && (
+            <div className="mt-4">
+              <AllAnswerReview
+                result={result}
+                questions={test.questions}
+                lang={lang}
+              />
+            </div>
+          )}
+        </div>
 
         <div className="mt-8 flex flex-col sm:flex-row gap-3">
           <Link href={`/tre4/${testSlug}/instructions`} className="btn-primary flex-1 text-center">

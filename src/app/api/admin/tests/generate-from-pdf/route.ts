@@ -29,7 +29,6 @@ import { NextResponse } from 'next/server';
 import { extractText, getDocumentProxy } from 'unpdf';
 import { buildSystemPrompt, buildPdfContextPrompt } from '@/lib/admin/generator-prompt';
 import { mapAIQuestionToDBRow } from '@/lib/admin/question-mapper';
-import { validateAIOutput } from '@/lib/admin/question-validator';
 import { generateTestSlug } from '@/lib/admin/slug-generator';
 import { generateTestBatched } from '@/lib/admin/generation.service';
 import { db } from '@/lib/db';
@@ -161,23 +160,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: msg }, { status: 502 });
     }
 
-    const structVal = validateAIOutput(aiResult, totalQuestions);
-    if (!structVal.valid) {
-      const errMsg = structVal.errors.map((e) => `${e.field}: ${e.message}`).join('; ');
-      await markFailed(testId, errMsg);
-      return NextResponse.json({ error: `Schema validation failed: ${errMsg}` }, { status: 502 });
+    // PDF extraction: validate schema but allow fewer questions than requested
+    // (the PDF might contain fewer Q&As than the admin specified).
+    const extractedQuestions = Array.isArray(aiResult?.questions) ? aiResult.questions as AIQuestion[] : [];
+    if (extractedQuestions.length === 0) {
+      const msg = 'No questions could be extracted from the PDF. Make sure the PDF contains readable Q&A text.';
+      await markFailed(testId, msg);
+      return NextResponse.json({ error: msg }, { status: 422 });
     }
+    const actualCount = extractedQuestions.length;
 
     try {
       await db.$transaction(async (tx) => {
         await tx.generatedQuestion.createMany({
-          data: (aiResult.questions as AIQuestion[]).map((q) => mapAIQuestionToDBRow(q, testId)),
+          data: extractedQuestions.map((q) => mapAIQuestionToDBRow(q, testId)),
         });
         await tx.generatedTest.update({
           where: { id: testId },
           data: {
             titleHi: aiResult.titleHi?.trim() || `${topic} — PDF अभ्यास प्रश्नपत्र`,
             titleEn: aiResult.titleEn?.trim() || `${topic} — PDF Practice Paper`,
+            totalQuestions: actualCount,         // update to actual extracted count
+            durationMinutes: actualCount,        // 1 min per question
             status: 'GENERATED',
             generationMs: 0,
             errorMessage: null,
@@ -190,7 +194,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: `DB write failed: ${msg}` }, { status: 500 });
     }
 
-    return NextResponse.json({ testId, status: 'GENERATED', totalQuestions, source: 'pdf' });
+    return NextResponse.json({ testId, status: 'GENERATED', totalQuestions: actualCount, source: 'pdf' });
   }
 
   // ── 3b. Multi-batch (> 25Q) — streaming NDJSON response ─────────────────

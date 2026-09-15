@@ -467,21 +467,18 @@ export function buildCustomBatchUserPrompt(
   return lines.join('\n');
 }
 
-// ─── PDF-grounded question generation prompt ──────────────────────────────────
+// ─── PDF question extraction + formatting prompt ─────────────────────────────
 
 /**
- * Build a user prompt for generating questions strictly from extracted PDF content.
+ * Build a prompt that EXTRACTS existing questions from PDF text and converts
+ * them into the platform's bilingual MCQ format.
  *
- * Unlike the regular prompt (which draws on OpenAI's general knowledge), this
- * prompt instructs the model to ground every question in the supplied source text.
- * Questions that cannot be answered from the text should not be generated.
+ * The PDF is expected to contain actual Q&A content (questions, options, answers).
+ * This prompt tells the model to keep the same questions and correct answers —
+ * only translate, add the missing language, and fit the JSON schema.
  *
- * @param pdfText   Extracted plain text from the PDF (may be truncated to fit token budget)
- * @param totalQ    Number of questions to generate
- * @param category  Exam category / subject label
- * @param topic     Admin-provided topic label (shown in question metadata)
- * @param exam      Exam name (e.g. 'BPSC TRE 4')
- * @param difficulty Difficulty level
+ * If the PDF has fewer than totalQ usable questions, the model is instructed to
+ * use whatever is available (the route validator will catch count mismatches).
  */
 export function buildPdfContextPrompt(
   pdfText: string,
@@ -491,68 +488,65 @@ export function buildPdfContextPrompt(
   exam: string,
   difficulty: string,
 ): string {
-  const difficultyNote =
-    DIFFICULTY_INSTRUCTIONS[difficulty] ?? DIFFICULTY_INSTRUCTIONS.Moderate;
-  const dist = computeDistribution(difficulty as GeneratedDifficulty, totalQ);
-  const distStr = formatDistribution(dist);
-
   return [
-    `Generate exactly ${totalQ} unique bilingual MCQ questions for a BPSC TRE 4 practice test.`,
-    `All questions MUST be grounded in the following source material.`,
-    `Do NOT draw on general knowledge outside this text.`,
-    `Each question must be answerable using only the content below.`,
+    `You are a bilingual (Hindi + English) question formatter for ${exam} practice tests.`,
     '',
-    `Exam: ${exam}`,
+    `The text below is extracted from a PDF that contains MCQ questions.`,
+    `Your task is to EXTRACT and FORMAT those exact questions into our JSON schema.`,
+    '',
+    '═══ STRICT RULES ═══',
+    '1. DO NOT invent or paraphrase questions. Use the EXACT question text from the PDF.',
+    '2. DO NOT change the correct answer. Use the answer marked as correct in the PDF.',
+    '3. If the PDF has a question in Hindi only → translate options/explanation to English (keep Hindi as-is).',
+    '4. If the PDF has a question in English only → translate to Hindi as well.',
+    '5. If a question already has both languages → use both as-is.',
+    '6. If the PDF has fewer than the requested number of questions, extract ALL available ones.',
+    `   Target: up to ${totalQ} questions. Extract as many as the PDF contains (minimum 1).`,
+    '7. Option E must always be: Hindi: "उत्तर नहीं देना चाहता" / English: "I do not want to answer".',
+    '   Option E can NEVER be the correct answer.',
+    '8. correctOption must be A, B, C, or D only.',
+    '',
     `Category: ${category}`,
     `Topic: ${topic}`,
     `Difficulty: ${difficulty}`,
-    `Difficulty guidance: ${difficultyNote}`,
     '',
     '═══════════════════════════════════════════',
-    'SOURCE MATERIAL (PDF CONTENT — base all questions on this)',
+    'PDF CONTENT (extract questions from this)',
     '═══════════════════════════════════════════',
     pdfText,
     '',
     '═══════════════════════════════════════════',
-    'REQUIRED QUESTION TYPE DISTRIBUTION',
-    '═══════════════════════════════════════════',
-    distStr,
-    '',
-    `IMPORTANT: Total must equal exactly ${totalQ}. Do NOT repeat the same question type more than 3 times in a row.`,
-    '',
-    FORMAT_GUIDE,
-    '',
-    '═══════════════════════════════════════════',
-    'JSON SCHEMA (return ONLY this, no other text)',
+    'OUTPUT JSON SCHEMA (return ONLY this, no other text)',
     '═══════════════════════════════════════════',
     `{
-  "titleHi": "<Hindi title — 6 to 12 words>",
-  "titleEn": "<English title — 5 to 10 words>",
+  "titleHi": "<Hindi title based on topic — 6 to 12 words>",
+  "titleEn": "<English title based on topic — 5 to 10 words>",
   "questions": [
     {
       "order": 1,
-      "category": "<sub-category tag>",
+      "category": "${category}",
       "topic": "${topic}",
-      "difficulty": "<Beginner | Easy | Moderate | Hard | Very Hard>",
-      "questionType": "<DIRECT | STATEMENT | QUOTE_ATTRIBUTION | CHRONOLOGY | MATCHING | ASSERTION_REASON>",
-      "questionHi": "<Hindi question text>",
+      "difficulty": "${difficulty}",
+      "questionType": "DIRECT",
+      "questionHi": "<Exact Hindi question from PDF, or translated from English>",
       "optionAHi": "<Hindi option A>",
       "optionBHi": "<Hindi option B>",
       "optionCHi": "<Hindi option C>",
       "optionDHi": "<Hindi option D>",
-      "explanationHi": "<Hindi explanation referencing the source text>",
-      "questionEn": "<English question text>",
+      "explanationHi": "<1-2 sentence Hindi explanation of why the answer is correct>",
+      "questionEn": "<Exact English question from PDF, or translated from Hindi>",
       "optionAEn": "<English option A>",
       "optionBEn": "<English option B>",
       "optionCEn": "<English option C>",
       "optionDEn": "<English option D>",
-      "explanationEn": "<English explanation referencing the source text>",
+      "explanationEn": "<1-2 sentence English explanation>",
       "correctOption": "A"
     }
   ]
 }`,
     '',
-    `Generate all ${totalQ} questions now, grounded in the source material above.`,
+    'Extract ALL questions from the PDF above and format them exactly as shown.',
+    'Do not add questions that are not in the PDF.',
   ].join('\n');
 }
 

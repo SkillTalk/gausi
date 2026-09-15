@@ -149,9 +149,9 @@ export async function generateTest(
     await db.generatedTest.update({
       where: { id: testId },
       data: {
-        titleHi: aiResult.titleHi.trim(),
-        // Keep AI-generated English title but do NOT overwrite topic — topic = admin input, canonical
-        titleEn: aiResult.titleEn.trim(),
+        // Always preserve the admin-entered topic name — do NOT use AI-generated titles
+        titleHi: `${input.topic} — अभ्यास प्रश्नपत्र`,
+        titleEn: `${input.topic} — Practice Paper`,
         status: 'GENERATED',
         generationMs,
         errorMessage: null,
@@ -298,11 +298,7 @@ export async function generateTestBatched(
     }));
     allQuestions.push(...batchQuestions);
 
-    // Capture title from the first batch
-    if (batchNum === 1) {
-      savedTitleHi = aiResult.titleHi?.trim() || savedTitleHi;
-      savedTitleEn = aiResult.titleEn?.trim() || savedTitleEn;
-    }
+    // Do NOT capture AI-generated titles — always preserve admin-entered topic name
 
     console.log(`[${corrId}:${testId}] BATCH_${batchNum}/${totalBatches} done | cumulative=${allQuestions.length}Q | +${Date.now() - reqStart}ms`);
     opts?.onBatchComplete?.(batchNum, allQuestions.length);

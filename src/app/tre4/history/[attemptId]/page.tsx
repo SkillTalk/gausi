@@ -103,6 +103,97 @@ function HistoricalAnswerCard({
   );
 }
 
+// ─── All-answers card (shows every question including correct ones) ────────────
+
+function AllAnswerCard({
+  index,
+  snapshot,
+  question,
+  lang,
+}: {
+  index: number;
+  snapshot: AnswerSnapshot;
+  question: Question | undefined;
+  lang: Lang;
+}) {
+  const statusLabel: Record<AnswerSnapshot['status'], string> = {
+    correct: '✓ Correct',
+    wrong: '✗ Wrong',
+    optionE: '— Skipped (Option E)',
+    unanswered: '— Not Answered',
+  };
+  const statusColour: Record<AnswerSnapshot['status'], string> = {
+    correct: 'bg-green-50 border-green-200',
+    wrong: 'bg-red-50 border-red-200',
+    optionE: 'bg-amber-50 border-amber-200',
+    unanswered: 'bg-slate-50 border-slate-200',
+  };
+  const badgeColour: Record<AnswerSnapshot['status'], string> = {
+    correct: 'bg-green-100 text-green-700',
+    wrong: 'bg-red-100 text-red-700',
+    optionE: 'bg-amber-100 text-amber-700',
+    unanswered: 'bg-slate-100 text-slate-600',
+  };
+
+  return (
+    <div className={`rounded-2xl border p-5 space-y-3 ${statusColour[snapshot.status]}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+          Q{index}. {question?.category ?? snapshot.questionId}
+        </span>
+        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${badgeColour[snapshot.status]}`}>
+          {statusLabel[snapshot.status]}
+        </span>
+      </div>
+
+      {question ? (
+        <p className="text-slate-900 font-medium leading-relaxed" style={{ lineHeight: 1.7 }}>
+          {question[lang].question}
+        </p>
+      ) : (
+        <p className="text-slate-400 italic text-sm">
+          Question definition no longer available (ID: {snapshot.questionId})
+        </p>
+      )}
+
+      {question && (
+        <div className="grid gap-1.5 text-sm">
+          {(Object.entries(question[lang].options) as [OptionKey, string][])
+            .filter(([, val]) => val)
+            .map(([key, val]) => {
+              const isCorrect = key === snapshot.correctOption;
+              const isSelected = key === snapshot.selectedOption;
+              return (
+                <div
+                  key={key}
+                  className={`flex items-start gap-2 rounded-lg px-3 py-2 ${
+                    isCorrect
+                      ? 'bg-green-100 text-green-800 font-semibold'
+                      : isSelected && !isCorrect
+                      ? 'bg-red-100 text-red-800'
+                      : 'bg-white/60 text-slate-700'
+                  }`}
+                >
+                  <span className="font-bold shrink-0">{key}.</span>
+                  <span>{val}</span>
+                  {isCorrect && <span className="ml-auto shrink-0 text-green-700">✓</span>}
+                  {isSelected && !isCorrect && <span className="ml-auto shrink-0 text-red-600">✗</span>}
+                </div>
+              );
+            })}
+        </div>
+      )}
+
+      {question && (
+        <div className="bg-white/70 rounded-xl px-4 py-3 text-sm text-slate-700 leading-relaxed border border-slate-100">
+          <span className="font-semibold text-slate-900">Explanation: </span>
+          {question[lang].explanation}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HistoricalResultPage({ params }: PageProps) {
@@ -111,6 +202,7 @@ export default function HistoricalResultPage({ params }: PageProps) {
   const [fetchState, setFetchState] = useState<FetchState>('loading');
   const [lang, setLang] = useState<Lang>('hi');
   const [showWrong, setShowWrong] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   // Questions for DB-generated tests (not in static content)
   const [dynamicQuestions, setDynamicQuestions] = useState<Question[]>([]);
 
@@ -292,6 +384,28 @@ export default function HistoricalResultPage({ params }: PageProps) {
               </div>
             )}
           </>
+        )}
+
+        {/* View All Answers */}
+        <button
+          onClick={() => setShowAll((v) => !v)}
+          className="btn-secondary w-full py-3 mb-4"
+        >
+          {showAll ? 'Hide' : 'View'} All Answers ({answers.length})
+        </button>
+
+        {showAll && (
+          <div className="space-y-4 mb-6">
+            {answers.map((snap, idx) => (
+              <AllAnswerCard
+                key={snap.questionId}
+                index={idx + 1}
+                snapshot={snap}
+                question={questionMap.get(snap.questionId)}
+                lang={lang}
+              />
+            ))}
+          </div>
         )}
 
         <div className="mt-8 flex flex-col sm:flex-row gap-3">

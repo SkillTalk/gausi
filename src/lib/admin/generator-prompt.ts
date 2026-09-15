@@ -15,7 +15,7 @@
  * Server-side only. Never exposed to the browser.
  */
 
-import type { GenerateTestInput, GeneratedDifficulty } from '@/types/generated-test';
+import type { GenerateTestInput } from '@/types/generated-test';
 
 // ─── Distribution by difficulty ───────────────────────────────────────────────
 

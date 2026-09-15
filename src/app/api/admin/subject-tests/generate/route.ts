@@ -21,7 +21,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
-import { generateTest } from '@/lib/admin/generation.service';
+import { generateTest, generateTestBatched } from '@/lib/admin/generation.service';
 import { generateSubjectTest } from '@/lib/admin/subject-test-generation.service';
 import { tre4SubjectsByCategory } from '@/content/exams/tre4/subjects';
 import { SUBJECT_SERIES_CATEGORIES } from '@/content/exams/tre4/subjects';
@@ -218,7 +218,7 @@ export async function POST(request: Request) {
   }
 
   if (rawFormat === 'CUSTOM_PRACTICE') {
-    // ── Custom Practice: 1–200Q, admin-specified, existing behaviour ─────────
+    // ── Custom Practice: 1–200Q, admin-specified ──────────────────────────────
     const validation = validateCustomPracticeInput(b);
     if (!validation.valid) {
       return NextResponse.json({ error: validation.error }, { status: 400 });
@@ -229,22 +229,74 @@ export async function POST(request: Request) {
       `[SUBJECT-GENERATE] CUSTOM_PRACTICE | category="${input.category}" | q=${input.totalQuestions} | diff="${input.difficulty}"`,
     );
 
-    const result = await generateTest(input, apiKey);
-
-    if (!result.ok) {
-      console.error(`[SUBJECT-GENERATE] custom failed | stage=${result.stage} | ${result.error}`);
-      const httpStatus = result.stage === 'AI_CALL' ? 502 : 500;
-      return NextResponse.json({ error: result.error }, { status: httpStatus });
+    // ≤ 25Q: single OpenAI call — fast, plain JSON response.
+    if (input.totalQuestions <= 25) {
+      const result = await generateTest(input, apiKey);
+      if (!result.ok) {
+        console.error(`[SUBJECT-GENERATE] custom failed | ${result.error}`);
+        return NextResponse.json({ error: result.error }, { status: result.stage === 'AI_CALL' ? 502 : 500 });
+      }
+      console.log(`[SUBJECT-GENERATE] CUSTOM success | testId=${result.testId} | ${result.generationMs}ms`);
+      return NextResponse.json({
+        testId: result.testId,
+        status: 'GENERATED',
+        slug: result.slug,
+        format: 'CUSTOM_PRACTICE',
+        totalQuestions: input.totalQuestions,
+        generationMs: result.generationMs,
+      });
     }
 
-    console.log(`[SUBJECT-GENERATE] CUSTOM success | testId=${result.testId} | ${result.generationMs}ms`);
-    return NextResponse.json({
-      testId: result.testId,
-      status: 'GENERATED',
-      slug: result.slug,
-      format: 'CUSTOM_PRACTICE',
-      totalQuestions: input.totalQuestions,
-      generationMs: result.generationMs,
+    // > 25Q: multi-batch generation — stream progress so Cloudflare doesn't 524.
+    const totalBatches = Math.ceil(input.totalQuestions / 25);
+    console.log(`[SUBJECT-GENERATE] CUSTOM_PRACTICE batched | q=${input.totalQuestions} | batches=${totalBatches}`);
+
+    const encoder = new TextEncoder();
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = stream.writable.getWriter();
+    const send = (obj: Record<string, unknown>) =>
+      writer.write(encoder.encode(JSON.stringify(obj) + '\n'));
+
+    void (async () => {
+      try {
+        await send({ stage: 'starting', totalBatches });
+
+        const result = await generateTestBatched(input, apiKey, {
+          onBatchComplete: (batchNum, totalQuestions) => {
+            void send({ stage: 'batch_complete', batch: batchNum, totalBatches, totalQuestions });
+          },
+        });
+
+        if (!result.ok) {
+          console.error(`[SUBJECT-GENERATE] custom batched failed | ${result.error}`);
+          await send({ stage: 'error', error: result.error, errorStage: result.stage });
+        } else {
+          console.log(`[SUBJECT-GENERATE] CUSTOM batched success | testId=${result.testId} | ${result.generationMs}ms`);
+          await send({
+            stage: 'done',
+            testId: result.testId,
+            status: 'GENERATED',
+            slug: result.slug,
+            format: 'CUSTOM_PRACTICE',
+            totalQuestions: input.totalQuestions,
+            generationMs: result.generationMs,
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unexpected error';
+        await send({ stage: 'error', error: msg });
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return new Response(stream.readable, {
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
     });
   }
 

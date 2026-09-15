@@ -352,6 +352,121 @@ export function buildUserPrompt(input: GenerateTestInput): string {
   return lines.join('\n');
 }
 
+// ─── Batch prompt for CUSTOM_PRACTICE multi-batch generation ─────────────────
+
+/**
+ * Build a user prompt for one batch of a CUSTOM_PRACTICE multi-batch generation.
+ *
+ * @param batchNumber  1-based index of this batch
+ * @param totalBatches total number of batches for this generation
+ * @param batchSize    number of questions to generate in this batch
+ * @param input        original admin input (topic, difficulty, category, etc.)
+ * @param prevQuestions questions already generated in earlier batches (for dedup guidance)
+ */
+export function buildCustomBatchUserPrompt(
+  batchNumber: number,
+  totalBatches: number,
+  batchSize: number,
+  input: GenerateTestInput,
+  prevQuestions: Array<{ questionEn: string }>,
+): string {
+  const difficultyNote =
+    DIFFICULTY_INSTRUCTIONS[input.difficulty] ?? DIFFICULTY_INSTRUCTIONS.Moderate;
+
+  const dist = computeDistribution(input.difficulty, batchSize);
+  const distStr = formatDistribution(dist);
+  const mode = input.topicAdherenceMode ?? 'NORMAL';
+
+  const scopeLines: string[] = [];
+  if (input.strictTopicScope || input.excludeScope) {
+    scopeLines.push('');
+    scopeLines.push('═══════════════════════════════════════════');
+    scopeLines.push(`TOPIC SCOPE BOUNDARY (mode: ${mode})`);
+    scopeLines.push('═══════════════════════════════════════════');
+    if (input.strictTopicScope) {
+      scopeLines.push('WHAT THIS TOPIC COVERS:');
+      scopeLines.push(input.strictTopicScope);
+    }
+    if (input.excludeScope) {
+      scopeLines.push('');
+      scopeLines.push('EXCLUDE / OUT OF SCOPE:');
+      scopeLines.push(input.excludeScope);
+    }
+  }
+
+  const prevBlock =
+    prevQuestions.length > 0
+      ? [
+          '',
+          '═══════════════════════════════════════════',
+          'DO NOT REPEAT THESE QUESTIONS (already generated in earlier batches)',
+          '═══════════════════════════════════════════',
+          'The following questions were already generated. Do not regenerate these or very similar ones:',
+          '',
+          ...prevQuestions.map((q, i) => `${i + 1}. ${q.questionEn}`),
+        ].join('\n')
+      : '';
+
+  const lines: string[] = [
+    `Generate exactly ${batchSize} unique bilingual MCQ practice questions for the following BPSC TRE 4 test.`,
+    `This is batch ${batchNumber} of ${totalBatches}. Use order numbers 1 through ${batchSize} in your response.`,
+    '(The server will remap these to the correct global order range automatically.)',
+    '',
+    `Exam: ${input.exam}`,
+    `Category: ${input.category}`,
+    `Topic: ${input.topic}`,
+    `Difficulty: ${input.difficulty}`,
+    `Difficulty guidance: ${difficultyNote}`,
+    ...scopeLines,
+    prevBlock,
+    '',
+    '═══════════════════════════════════════════',
+    'REQUIRED QUESTION TYPE DISTRIBUTION',
+    '═══════════════════════════════════════════',
+    distStr,
+    '',
+    'IMPORTANT DISTRIBUTION NOTES:',
+    `- The total MUST equal exactly ${batchSize}.`,
+    '- Do NOT repeat the same question type more than 3 times in a row.',
+    '',
+    FORMAT_GUIDE,
+    '',
+    '═══════════════════════════════════════════',
+    'JSON SCHEMA (return ONLY this, no other text)',
+    '═══════════════════════════════════════════',
+    `{
+  "titleHi": "<Hindi title — 6 to 12 words>",
+  "titleEn": "<English title — 5 to 10 words>",
+  "questions": [
+    {
+      "order": 1,
+      "category": "<sub-category tag>",
+      "topic": "${input.topic}",
+      "difficulty": "<Beginner | Easy | Moderate | Hard | Very Hard>",
+      "questionType": "<DIRECT | STATEMENT | QUOTE_ATTRIBUTION | CHRONOLOGY | MATCHING | ASSERTION_REASON>",
+      "questionHi": "<Hindi question text>",
+      "optionAHi": "<Hindi option A>",
+      "optionBHi": "<Hindi option B>",
+      "optionCHi": "<Hindi option C>",
+      "optionDHi": "<Hindi option D>",
+      "explanationHi": "<Hindi explanation — 1-2 sentences>",
+      "questionEn": "<English question text>",
+      "optionAEn": "<English option A>",
+      "optionBEn": "<English option B>",
+      "optionCEn": "<English option C>",
+      "optionDEn": "<English option D>",
+      "explanationEn": "<English explanation — 1-2 sentences>",
+      "correctOption": "A"
+    }
+  ]
+}`,
+    '',
+    `Generate all ${batchSize} questions now.`,
+  ];
+
+  return lines.join('\n');
+}
+
 // ─── Export utilities for tests ───────────────────────────────────────────────
 
 export { computeDistribution, formatDistribution };

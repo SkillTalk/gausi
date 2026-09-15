@@ -11,8 +11,12 @@
 
 import type { ExamTest } from '@/types/exam';
 import test_2026_08_19_1857 from './2026-08-19-1857';
+import test_2026_09_09_bhagat_singh_simon from './2026-09-09-bhagat-singh-simon';
 
-export const tre4Tests: ExamTest[] = [test_2026_08_19_1857];
+export const tre4Tests: ExamTest[] = [
+  test_2026_08_19_1857,
+  test_2026_09_09_bhagat_singh_simon,
+];
 
 /** Convenience map for O(1) slug lookup */
 export const tre4TestsBySlug: Record<string, ExamTest> = Object.fromEntries(

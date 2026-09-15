@@ -9,6 +9,7 @@ export const tre4TopicGroups: TopicGroup[] = [
     dbCategory: 'History',
     topics: [
       { id: 'revolt-1857', label: 'Revolt of 1857', labelHi: '1857 का विद्रोह', available: true },
+      { id: 'bhagat-singh-simon', label: 'Bhagat Singh, Azad & Simon Commission', labelHi: 'भगत सिंह, आजाद और साइमन कमीशन', available: true },
       { id: 'national-movement', label: 'Indian National Movement', labelHi: 'भारतीय राष्ट्रीय आंदोलन', available: false },
       { id: 'ancient-india', label: 'Ancient India', labelHi: 'प्राचीन भारत', available: false },
       { id: 'medieval-india', label: 'Medieval India', labelHi: 'मध्यकालीन भारत', available: false },

@@ -37,12 +37,16 @@ function formatDate(iso: string | null) {
   });
 }
 
+type TestFormat = 'FULL_SUBJECT_TEST' | 'CUSTOM_PRACTICE';
+
 export default function AdminSubjectTestsPage() {
   const router = useRouter();
 
   // ─── Form state ────────────────────────────────────────────────────────────
   const [subject, setSubject] = useState(tre4SubjectSeries[0]?.category ?? '');
   const [difficulty, setDifficulty] = useState<Difficulty>('Beginner');
+  const [testFormat, setTestFormat] = useState<TestFormat>('FULL_SUBJECT_TEST');
+  // CUSTOM_PRACTICE only — FULL_SUBJECT_TEST always uses 80Q/80min
   const [totalQuestions, setTotalQuestions] = useState(25);
   const [durationMinutes, setDurationMinutes] = useState(15);
 
@@ -68,8 +72,12 @@ export default function AdminSubjectTestsPage() {
 
   useEffect(() => { void loadTests(); }, [loadTests]);
 
-  // Auto-calculate next test number for selected subject
-  const nextTestNumber = tests.filter((t) => t.category === subject && t.status !== 'ARCHIVED').length + 1;
+  // Auto-calculate next test number for selected subject.
+  // Only count tests that represent a successfully generated attempt — exclude
+  // DRAFT and GENERATING (which represent failed or in-progress generations that
+  // never completed). This prevents stale/failed records from skipping numbers.
+  const NUMBERING_STATUSES = new Set(['GENERATED', 'VALIDATING', 'VALIDATION_FAILED', 'READY', 'SCHEDULED', 'PUBLISHED']);
+  const nextTestNumber = tests.filter((t) => t.category === subject && NUMBERING_STATUSES.has(t.status)).length + 1;
   const autoTopic = `${subject} — Test ${nextTestNumber}`;
 
   async function handleGenerate(e: React.FormEvent) {
@@ -79,17 +87,23 @@ export default function AdminSubjectTestsPage() {
     setGenError(null);
 
     try {
+      const body: Record<string, unknown> = {
+        exam: 'BPSC TRE 4',
+        category: subject,
+        topic: autoTopic,
+        difficulty,
+        testFormat,
+      };
+      // CUSTOM_PRACTICE passes admin-chosen Q/duration; FULL enforces 80/80 server-side
+      if (testFormat === 'CUSTOM_PRACTICE') {
+        body.totalQuestions = totalQuestions;
+        body.durationMinutes = durationMinutes;
+      }
+
       const res = await fetch('/api/admin/subject-tests/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          exam: 'BPSC TRE 4',
-          category: subject,
-          topic: autoTopic,
-          difficulty,
-          totalQuestions,
-          durationMinutes,
-        }),
+        body: JSON.stringify(body),
       });
 
       let data: { testId?: string; error?: string } = {};
@@ -162,6 +176,47 @@ export default function AdminSubjectTestsPage() {
         <h2 className="text-lg font-bold text-slate-800 mb-5">Generate Subject Test Paper</h2>
         <form onSubmit={(e) => { void handleGenerate(e); }} className="space-y-5">
 
+          {/* Format selector */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-2">Format</label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setTestFormat('FULL_SUBJECT_TEST')}
+                className={`px-4 py-3 rounded-xl border-2 text-left transition-colors ${
+                  testFormat === 'FULL_SUBJECT_TEST'
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="font-bold text-sm text-slate-800">📋 Full Subject Test</div>
+                <div className="text-xs text-slate-500 mt-0.5">80Q · 80 marks · STRICT scope</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTestFormat('CUSTOM_PRACTICE')}
+                className={`px-4 py-3 rounded-xl border-2 text-left transition-colors ${
+                  testFormat === 'CUSTOM_PRACTICE'
+                    ? 'border-brand-500 bg-brand-50'
+                    : 'border-slate-200 hover:border-slate-300'
+                }`}
+              >
+                <div className="font-bold text-sm text-slate-800">🛠 Custom Practice</div>
+                <div className="text-xs text-slate-500 mt-0.5">1–200Q · admin-specified</div>
+              </button>
+            </div>
+
+            {testFormat === 'FULL_SUBJECT_TEST' && (
+              <div className="mt-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-800 space-y-1">
+                <p className="font-semibold">Full Subject Test — BPSC TRE 4 Mains (Concerned Subject)</p>
+                <p>• Exactly <strong>80 questions</strong>, 80 marks, 4 batches of 20</p>
+                <p>• <strong>Recommended practice duration: 80 minutes</strong> — this is suggested practice timing, not an official separate section duration</p>
+                <p>• All questions strictly from the selected subject syllabus (STRICT mode)</p>
+                <p>• Generation takes <strong>3–4 minutes</strong> — do not close this tab</p>
+              </div>
+            )}
+          </div>
+
           {/* Subject + Difficulty row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -199,35 +254,59 @@ export default function AdminSubjectTestsPage() {
             <p className="text-xs text-brand-500 mt-0.5">Based on {subjectTests.filter(t => t.status !== 'ARCHIVED').length} existing {subject} test(s)</p>
           </div>
 
-          {/* Questions + Duration */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                Number of Questions <span className="text-slate-400 font-normal">(1–200)</span>
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={200}
-                value={totalQuestions}
-                onChange={(e) => setTotalQuestions(Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-              />
+          {/* FULL_SUBJECT_TEST: locked fields */}
+          {testFormat === 'FULL_SUBJECT_TEST' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-500 mb-1.5">
+                  Questions <span className="font-normal">(fixed)</span>
+                </label>
+                <div className="w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2.5 text-sm text-slate-400 cursor-not-allowed">
+                  80 (server-enforced)
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-500 mb-1.5">
+                  Recommended Duration <span className="font-normal">(fixed)</span>
+                </label>
+                <div className="w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2.5 text-sm text-slate-400 cursor-not-allowed">
+                  80 minutes (practice)
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                Duration (minutes)
-              </label>
-              <input
-                type="number"
-                min={5}
-                max={180}
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(Number(e.target.value))}
-                className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
-              />
+          )}
+
+          {/* CUSTOM_PRACTICE: editable fields */}
+          {testFormat === 'CUSTOM_PRACTICE' && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Number of Questions <span className="text-slate-400 font-normal">(1–200)</span>
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={totalQuestions}
+                  onChange={(e) => setTotalQuestions(Number(e.target.value))}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  Duration (minutes)
+                </label>
+                <input
+                  type="number"
+                  min={5}
+                  max={180}
+                  value={durationMinutes}
+                  onChange={(e) => setDurationMinutes(Number(e.target.value))}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {genError && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
@@ -240,7 +319,11 @@ export default function AdminSubjectTestsPage() {
             disabled={generating}
             className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-colors"
           >
-            {generating ? '⏳ Generating… (this may take 60–90 seconds)' : `✨ Generate ${autoTopic}`}
+            {generating
+              ? testFormat === 'FULL_SUBJECT_TEST'
+                ? '⏳ Generating 80 questions in 4 batches… (3–4 minutes)'
+                : '⏳ Generating…'
+              : `✨ Generate ${autoTopic}`}
           </button>
         </form>
       </div>

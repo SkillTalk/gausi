@@ -11,11 +11,10 @@ import { db } from '@/lib/db';
 import { validateAIOutput } from '@/lib/admin/question-validator';
 import { buildSystemPrompt, buildUserPrompt } from '@/lib/admin/generator-prompt';
 import { generateTestSlug } from '@/lib/admin/slug-generator';
+import { mapAIQuestionToDBRow } from '@/lib/admin/question-mapper';
 import type { AIGenerationResult, AIQuestion, GenerateTestInput } from '@/types/generated-test';
 
 const OPENAI_MODEL = 'gpt-4o';
-const OPTION_E_HI = 'उत्तर नहीं देना चाहता';
-const OPTION_E_EN = 'I do not want to answer';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -142,29 +141,9 @@ export async function generateTest(
   //    interactive-transaction timeout on Neon (default 5 s is too short for 25 rows).
   try {
     await db.generatedQuestion.createMany({
-      data: (aiResult.questions as AIQuestion[]).map((q) => ({
-        testId,
-        order: q.order,
-        category: q.category.trim(),
-        topic: q.topic.trim(),
-        difficulty: q.difficulty.trim(),
-        questionType: q.questionType?.trim() ?? 'DIRECT',
-        questionHi: q.questionHi.trim(),
-        optionAHi: q.optionAHi.trim(),
-        optionBHi: q.optionBHi.trim(),
-        optionCHi: q.optionCHi.trim(),
-        optionDHi: q.optionDHi.trim(),
-        optionEHi: OPTION_E_HI,
-        explanationHi: q.explanationHi.trim(),
-        questionEn: q.questionEn.trim(),
-        optionAEn: q.optionAEn.trim(),
-        optionBEn: q.optionBEn.trim(),
-        optionCEn: q.optionCEn.trim(),
-        optionDEn: q.optionDEn.trim(),
-        optionEEn: OPTION_E_EN,
-        explanationEn: q.explanationEn.trim(),
-        correctOption: q.correctOption.trim().toUpperCase(),
-      })),
+      // mapAIQuestionToDBRow is the shared pure mapper from question-mapper.ts.
+      // Same fields, same trimming, same Option E enforcement — no behaviour change.
+      data: (aiResult.questions as AIQuestion[]).map((q) => mapAIQuestionToDBRow(q, testId)),
     });
 
     await db.generatedTest.update({

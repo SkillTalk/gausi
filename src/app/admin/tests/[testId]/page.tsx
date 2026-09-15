@@ -1436,6 +1436,17 @@ export default function AdminTestPreviewPage({ params }: { params: Params }) {
               </button>
             )}
 
+            {/* Publish without Validate — shown for GENERATED / VALIDATION_FAILED */}
+            {canPublishDirect && (
+              <button
+                onClick={() => { void handlePublishDirect(); }}
+                disabled={isOperationInProgress}
+                className="text-sm font-semibold px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition-colors disabled:opacity-50"
+              >
+                {publishing ? 'Publishing…' : '⚡ Publish without Validate'}
+              </button>
+            )}
+
             {/* Regenerate — disabled for immutable states */}
             {!isPublished && test.status !== 'ARCHIVED' && (
               <button

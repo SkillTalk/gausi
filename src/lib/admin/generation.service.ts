@@ -197,8 +197,8 @@ export async function generateTestBatched(
 
   // 1. Create GENERATING record
   let testId: string;
-  let savedTitleHi = `${input.topic} — अभ्यास प्रश्नपत्र`;
-  let savedTitleEn = `${input.topic} — Practice Paper`;
+  const savedTitleHi = `${input.topic} — अभ्यास प्रश्नपत्र`;
+  const savedTitleEn = `${input.topic} — Practice Paper`;
 
   try {
     const created = await db.generatedTest.create({

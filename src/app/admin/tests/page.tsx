@@ -314,7 +314,7 @@ export default function AdminTestsPage() {
           </div>
         </div>
 
-        <form onSubmit={(e) => { pdfMode ? void handleGenerateFromPdf(e) : void handleGenerate(e); }} className="space-y-5">
+        <form onSubmit={(e) => { if (pdfMode) { void handleGenerateFromPdf(e); } else { void handleGenerate(e); } }} className="space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {/* Exam */}
             <div>

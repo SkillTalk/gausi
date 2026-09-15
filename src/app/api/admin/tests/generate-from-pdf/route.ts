@@ -26,9 +26,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 import { NextResponse } from 'next/server';
-// pdf-parse v1 exports a single function as CJS default.
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse') as (buffer: Buffer) => Promise<{ text: string; numpages: number }>;
+import { extractText, getDocumentProxy } from 'unpdf';
 import { buildSystemPrompt, buildPdfContextPrompt } from '@/lib/admin/generator-prompt';
 import { mapAIQuestionToDBRow } from '@/lib/admin/question-mapper';
 import { validateAIOutput } from '@/lib/admin/question-validator';
@@ -86,9 +84,13 @@ export async function POST(request: Request) {
   // ── 2. Extract PDF text ──────────────────────────────────────────────────
   let pdfText: string;
   try {
-    const buffer = Buffer.from(await (pdfFile as File).arrayBuffer());
-    const parsed = await pdfParse(buffer);
-    pdfText = parsed.text.replace(/\s+/g, ' ').trim().slice(0, PDF_TEXT_LIMIT);
+    const arrayBuffer = await (pdfFile as File).arrayBuffer();
+    const pdf = await getDocumentProxy(new Uint8Array(arrayBuffer));
+    const { text } = await extractText(pdf, { mergePages: true });
+    pdfText = (Array.isArray(text) ? text.join(' ') : text)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, PDF_TEXT_LIMIT);
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'PDF parse failed';
     return NextResponse.json({ error: `Could not read PDF: ${msg}` }, { status: 422 });

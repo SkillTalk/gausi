@@ -329,7 +329,7 @@ export default function AdminSubjectTestsPage() {
             </button>
           </div>
         </div>
-        <form onSubmit={(e) => { pdfMode ? void handleGenerateFromPdf(e) : void handleGenerate(e); }} className="space-y-5">
+        <form onSubmit={(e) => { if (pdfMode) { void handleGenerateFromPdf(e); } else { void handleGenerate(e); } }} className="space-y-5">
 
           {/* Format selector */}
           <div>

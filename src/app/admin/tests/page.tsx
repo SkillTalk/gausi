@@ -56,6 +56,7 @@ export default function AdminTestsPage() {
   const [form, setForm] = useState<GenerateTestInput>(DEFAULT_FORM);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [genProgress, setGenProgress] = useState<string | null>(null);
   const [tests, setTests] = useState<GeneratedTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -87,6 +88,7 @@ export default function AdminTestsPage() {
     if (generating) return;
     setGenerating(true);
     setGenError(null);
+    setGenProgress(null);
 
     try {
       const payload: GenerateTestInput = {
@@ -100,29 +102,78 @@ export default function AdminTestsPage() {
         body: JSON.stringify(payload),
       });
 
-      // Decouple JSON parsing from the outer catch so a non-JSON platform error
-      // (e.g. Vercel infrastructure response) is shown with its HTTP status rather
-      // than silently collapsed to "Network error".
-      let data: { testId?: string; error?: string; details?: unknown } = {};
-      try {
-        data = await res.json() as typeof data;
-      } catch {
-        // Body is not JSON — platform/infrastructure error
-        setGenError(`Server error (HTTP ${res.status}). Check Vercel logs for details.`);
+      if (!res.ok || !res.body) {
+        let errMsg = `Server error (HTTP ${res.status}). Check Vercel logs for details.`;
+        try {
+          const d = await res.json() as { error?: string };
+          if (d.error) errMsg = d.error;
+        } catch { /* ignore */ }
+        setGenError(errMsg);
         return;
       }
 
-      if (!res.ok || !data.testId) {
-        setGenError(data.error ?? 'Generation failed. Please try again.');
-        return;
-      }
+      const contentType = res.headers.get('Content-Type') ?? '';
 
-      // Navigate to preview on success
-      router.push(`/admin/tests/${data.testId}`);
+      if (contentType.includes('ndjson')) {
+        // Streaming path for >25Q batched generation
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let doneTestId: string | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const msg = JSON.parse(trimmed) as Record<string, unknown>;
+              if (msg.stage === 'starting') {
+                setGenProgress(`Starting… (0/${msg.totalBatches as number} batches)`);
+              } else if (msg.stage === 'batch_complete') {
+                const b = msg.batch as number;
+                const total = msg.totalBatches as number;
+                setGenProgress(`Batch ${b}/${total} complete — ${msg.totalQuestions as number} questions`);
+              } else if (msg.stage === 'done') {
+                doneTestId = msg.testId as string;
+                setGenProgress('✅ Generation complete!');
+              } else if (msg.stage === 'error') {
+                setGenError((msg.error as string | undefined) ?? 'Generation failed. Check Vercel logs.');
+              }
+            } catch { /* skip malformed line */ }
+          }
+        }
+
+        if (doneTestId) {
+          await new Promise<void>((r) => setTimeout(r, 600));
+          router.push(`/admin/tests/${doneTestId}`);
+        }
+      } else {
+        // Plain JSON path for ≤25Q (fast, single call)
+        let data: { testId?: string; error?: string } = {};
+        try {
+          data = await res.json() as typeof data;
+        } catch {
+          setGenError(`Server error (HTTP ${res.status}). Check Vercel logs for details.`);
+          return;
+        }
+        if (!data.testId) {
+          setGenError(data.error ?? 'Generation failed. Please try again.');
+          return;
+        }
+        router.push(`/admin/tests/${data.testId}`);
+      }
     } catch {
       setGenError('Request failed. Check your network connection and try again.');
     } finally {
       setGenerating(false);
+      setGenProgress(null);
     }
   }
 
@@ -346,6 +397,30 @@ export default function AdminTestsPage() {
             </div>
           )}
 
+          {/* Progress bar for multi-batch generation (>25Q) */}
+          {generating && genProgress && (
+            <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-brand-700 text-sm font-medium mb-2">
+                <span className="animate-spin inline-block">⏳</span>
+                {genProgress}
+              </div>
+              {(() => {
+                const match = genProgress.match(/Batch (\d+)\/(\d+)/);
+                const current = match ? parseInt(match[1]) : genProgress.includes('✅') ? 4 : 0;
+                const total = match ? parseInt(match[2]) : 4;
+                const pct = Math.round((current / total) * 100);
+                return (
+                  <div className="w-full bg-brand-200 rounded-full h-2">
+                    <div
+                      className="bg-brand-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <div className="flex items-center gap-4 pt-2">
             <button
               type="submit"
@@ -355,13 +430,13 @@ export default function AdminTestsPage() {
               {generating ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  Generating question paper...
+                  {genProgress ? 'Generating… do not close this tab' : 'Generating question paper...'}
                 </span>
               ) : (
                 'Generate Test Paper'
               )}
             </button>
-            {generating && (
+            {generating && !genProgress && (
               <p className="text-sm text-slate-500">This may take 15–45 seconds.</p>
             )}
           </div>

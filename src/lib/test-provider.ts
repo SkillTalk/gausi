@@ -241,3 +241,82 @@ export async function getPublishedDbTests(
 ): Promise<PublishedTestSummary[]> {
   return _cachedFetchPublishedDbTests(filters);
 }
+
+// ─── Minimal test metadata for the instructions page ─────────────────────────
+
+/**
+ * Lean shape for the instructions page — no questions, just the display fields
+ * needed before the student clicks "Start Test".
+ */
+export type TestMeta = {
+  id: string;
+  title: string;
+  titleHi: string;
+  subject: string;
+  difficulty: string;
+  date: string;
+  totalQuestions: number;
+  durationMinutes: number;
+  /** ID of the first question (for session initialisation). May be undefined for DB tests with no questions loaded. */
+  firstQuestionId: string | undefined;
+};
+
+/**
+ * Fetch only the metadata needed by the instructions page.
+ * For static tests this is synchronous (no DB). For DB tests it runs a lean
+ * SELECT (no questions JOIN), significantly cheaper than getTestBySlug().
+ */
+export async function getTestMetaBySlug(slug: string): Promise<TestMeta | null> {
+  // Static tests — resolve instantly, no DB call
+  const staticTest = tre4TestsBySlug[slug];
+  if (staticTest) {
+    return {
+      id: staticTest.id,
+      title: staticTest.title,
+      titleHi: staticTest.titleHi,
+      subject: staticTest.subject,
+      difficulty: staticTest.difficulty,
+      date: staticTest.date,
+      totalQuestions: staticTest.config.totalQuestions,
+      durationMinutes: staticTest.config.durationMinutes,
+      firstQuestionId: staticTest.questions[0]?.id,
+    };
+  }
+
+  // DB test — lean query, no questions JOIN
+  const row = await db.generatedTest.findFirst({
+    where: { slug, status: 'PUBLISHED' },
+    select: {
+      id: true,
+      titleHi: true,
+      titleEn: true,
+      category: true,
+      difficulty: true,
+      totalQuestions: true,
+      durationMinutes: true,
+      publishedAt: true,
+      createdAt: true,
+      // Fetch only the first question's ID for session init
+      questions: {
+        select: { id: true },
+        orderBy: { order: 'asc' },
+        take: 1,
+      },
+    },
+  });
+
+  if (!row) return null;
+
+  const date = row.publishedAt?.toISOString().slice(0, 10) ?? row.createdAt.toISOString().slice(0, 10);
+  return {
+    id: row.id,
+    title: row.titleEn,
+    titleHi: row.titleHi,
+    subject: row.category,
+    difficulty: mapDifficulty(row.difficulty),
+    date,
+    totalQuestions: row.totalQuestions,
+    durationMinutes: row.durationMinutes,
+    firstQuestionId: row.questions[0]?.id,
+  };
+}

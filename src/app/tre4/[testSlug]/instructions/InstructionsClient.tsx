@@ -7,36 +7,34 @@ import type { Lang, UserIdentity } from '@/types/exam';
 import { LanguageSelector } from '@/components/exam/LanguageSelector';
 import { EmailEntry } from '@/components/EmailEntry';
 import { useUser } from '@/hooks/useUser';
-import { useTest } from '@/hooks/useTest';
 import Link from 'next/link';
+import type { TestMeta } from '@/lib/test-provider';
+import { TRE4_MARKS } from '@/content/exams/tre4/config';
 
-type Props = { testSlug: string };
+type Props = {
+  testSlug: string;
+  /** Pre-fetched by the server component — skip loading state when provided. */
+  testMeta?: TestMeta | null;
+};
 
 type Step = 'loading' | 'email' | 'instructions';
 
-export default function InstructionsClient({ testSlug }: Props) {
+export default function InstructionsClient({ testSlug, testMeta }: Props) {
   const router = useRouter();
-  const { test, loading: testLoading } = useTest(testSlug);
   const [lang, setLang] = useState<Lang>('hi');
-  const [step, setStep] = useState<Step>('loading');
+  // If the server passed testMeta, skip the 'loading' step directly.
+  const [step, setStep] = useState<Step>(testMeta ? 'loading' : 'loading');
   const { identity, loaded, setIdentity } = useUser();
 
-  // After both test and localStorage are ready, decide which step to show
+  // Once localStorage (identity) is ready, decide email vs instructions step.
+  // testMeta from server is always immediately available — no extra wait.
   useEffect(() => {
-    if (!loaded || testLoading) return;
-    if (!test) return; // will render "not found" below
+    if (!loaded) return;
+    if (!testMeta) return; // will render "not found" below
     setStep(identity ? 'instructions' : 'email');
-  }, [loaded, testLoading, identity, test]);
+  }, [loaded, identity, testMeta]);
 
-  if (testLoading) {
-    return (
-      <div className="exam-surface flex items-center justify-center min-h-screen">
-        <div className="text-slate-400 text-sm">Loading test…</div>
-      </div>
-    );
-  }
-
-  if (!test) {
+  if (!testMeta) {
     return (
       <div className="exam-surface flex items-center justify-center min-h-screen">
         <p className="text-slate-500">Test not found.</p>
@@ -44,8 +42,7 @@ export default function InstructionsClient({ testSlug }: Props) {
     );
   }
 
-  const { config } = test;
-  const { marks } = config;
+  const marks = TRE4_MARKS;
 
   // Format a mark value for display, converting known fractions to readable strings.
   // e.g. -(1/3) → '-1/3'  rather than '-0.3333333333333333'
@@ -61,9 +58,8 @@ export default function InstructionsClient({ testSlug }: Props) {
   };
 
   const handleStart = () => {
-    let session = createSession(test.id, config.durationMinutes, lang);
-    const firstQ = test.questions[0];
-    if (firstQ) session = markVisited(session, firstQ.id);
+    let session = createSession(testMeta!.id, testMeta!.durationMinutes, lang);
+    if (testMeta!.firstQuestionId) session = markVisited(session, testMeta!.firstQuestionId);
     saveSession(session);
     router.push(`/tre4/${testSlug}/test`);
   };
@@ -86,9 +82,9 @@ export default function InstructionsClient({ testSlug }: Props) {
 
         {/* Test header */}
         <div className="card p-6 mb-6 text-center bg-gradient-to-br from-brand-600 to-purple-600 text-white border-0 shadow-card-lg">
-          <span className="text-xs font-bold uppercase tracking-wider opacity-80">{test.subject} • {test.difficulty}</span>
-          <h1 className="text-2xl font-extrabold mt-1">{test.title}</h1>
-          <p className="text-sm opacity-80 mt-1">{test.date}</p>
+          <span className="text-xs font-bold uppercase tracking-wider opacity-80">{testMeta.subject} • {testMeta.difficulty}</span>
+          <h1 className="text-2xl font-extrabold mt-1">{testMeta.title}</h1>
+          <p className="text-sm opacity-80 mt-1">{testMeta.date}</p>
         </div>
 
         {/* Email step — shown when no identity yet */}
@@ -139,8 +135,8 @@ export default function InstructionsClient({ testSlug }: Props) {
 
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { icon: '📝', label: 'Questions', value: config.totalQuestions },
-                  { icon: '⏱', label: 'Duration', value: `${config.durationMinutes} min` },
+                  { icon: '📝', label: 'Questions', value: testMeta.totalQuestions },
+                  { icon: '⏱', label: 'Duration', value: `${testMeta.durationMinutes} min` },
                   { icon: '🎯', label: 'Type', value: 'MCQ' },
                 ].map((s) => (
                   <div key={s.label} className="rounded-xl bg-brand-50 border border-brand-100 p-3 text-center">

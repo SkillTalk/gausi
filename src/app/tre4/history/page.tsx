@@ -123,7 +123,7 @@ function AttemptCard({ attempt: a }: { attempt: DbAttempt }) {
     <div className="card p-5">
       <div className="flex items-start justify-between gap-2 mb-1">
         <div className="flex-1 min-w-0">
-          <h2 className="font-bold text-slate-900 truncate">{a.testTitle}</h2>
+          <h2 className="font-bold text-slate-900 leading-snug">{a.testTitle}</h2>
           {a.subject && (
             <span className="text-xs font-semibold text-brand-700 bg-brand-50 px-2 py-0.5 rounded-full">
               {a.subject}

@@ -332,6 +332,7 @@ async function markFailed(testId: string, errorMessage: string): Promise<void> {
 export async function generateSubjectTest(
   input: SubjectTestInput,
   apiKey: string,
+  opts?: { onBatchComplete?: (batchNum: number, totalQuestions: number) => void },
 ): Promise<GenerationResult> {
   const reqStart = Date.now();
   const corrId = `subj-${Date.now().toString(36)}`;
@@ -446,6 +447,7 @@ export async function generateSubjectTest(
     console.log(
       `[${corrId}:${testId}] BATCH_${batchNum} done | +${Date.now() - reqStart}ms | cumulative=${allQuestions.length}Q`,
     );
+    opts?.onBatchComplete?.(batchNum, allQuestions.length);
   }
 
   // ── 3. Cross-batch literal duplicate check ────────────────────────────────

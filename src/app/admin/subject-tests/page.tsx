@@ -55,6 +55,7 @@ export default function AdminSubjectTestsPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const [genProgress, setGenProgress] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
@@ -86,6 +87,7 @@ export default function AdminSubjectTestsPage() {
     if (generating) return;
     setGenerating(true);
     setGenError(null);
+    setGenProgress(null);
 
     try {
       const body: Record<string, unknown> = {
@@ -107,24 +109,78 @@ export default function AdminSubjectTestsPage() {
         body: JSON.stringify(body),
       });
 
-      let data: { testId?: string; error?: string } = {};
-      try {
-        data = await res.json() as typeof data;
-      } catch {
-        setGenError(`Server error (HTTP ${res.status}). Check Vercel logs.`);
+      if (!res.ok || !res.body) {
+        // Non-streaming error (400/503) — still JSON
+        let errMsg = `Server error (HTTP ${res.status}).`;
+        try {
+          const d = await res.json() as { error?: string };
+          if (d.error) errMsg = d.error;
+        } catch { /* ignore */ }
+        setGenError(errMsg);
         return;
       }
 
-      if (!res.ok || !data.testId) {
-        setGenError(data.error ?? 'Generation failed. Please try again.');
-        return;
-      }
+      // ── FULL_SUBJECT_TEST returns a streaming NDJSON response.
+      // CUSTOM_PRACTICE also returns the same format now for consistency,
+      // but falls back gracefully if it's plain JSON.
+      const contentType = res.headers.get('Content-Type') ?? '';
 
-      router.push(`/admin/tests/${data.testId}`);
+      if (contentType.includes('ndjson') || contentType.includes('octet-stream')) {
+        // Streaming path — read chunks and update progress
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let doneTestId: string | null = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split on newlines (NDJSON — one JSON object per line)
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const msg = JSON.parse(trimmed) as Record<string, unknown>;
+              if (msg.stage === 'starting') {
+                setGenProgress('Starting generation… (batch 0/4)');
+              } else if (msg.stage === 'batch_complete') {
+                const b = msg.batch as number;
+                const total = msg.totalBatches as number;
+                setGenProgress(`Batch ${b}/${total} complete — ${msg.totalQuestions as number} questions generated`);
+              } else if (msg.stage === 'done') {
+                doneTestId = msg.testId as string;
+                setGenProgress('✅ All 80 questions generated!');
+              } else if (msg.stage === 'error') {
+                setGenError((msg.error as string | undefined) ?? 'Generation failed. Check Vercel logs.');
+              }
+            } catch { /* malformed line — skip */ }
+          }
+        }
+
+        if (doneTestId) {
+          // Short pause so user sees the ✅ message before navigation
+          await new Promise<void>((r) => setTimeout(r, 800));
+          router.push(`/admin/tests/${doneTestId}`);
+        }
+      } else {
+        // CUSTOM_PRACTICE plain-JSON fallback
+        const data = await res.json() as { testId?: string; error?: string };
+        if (!data.testId) {
+          setGenError(data.error ?? 'Generation failed. Please try again.');
+          return;
+        }
+        router.push(`/admin/tests/${data.testId}`);
+      }
     } catch {
-      setGenError('Request failed. Check your connection.');
+      setGenError('Request failed. Check your connection and try again.');
     } finally {
       setGenerating(false);
+      setGenProgress(null);
     }
   }
 
@@ -333,6 +389,31 @@ export default function AdminSubjectTestsPage() {
             </div>
           )}
 
+          {/* Progress display for FULL_SUBJECT_TEST streaming */}
+          {generating && genProgress && (
+            <div className="bg-brand-50 border border-brand-200 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 text-brand-700 text-sm font-medium mb-2">
+                <span className="animate-spin inline-block">⏳</span>
+                {genProgress}
+              </div>
+              {/* Extract batch number from progress message for progress bar */}
+              {(() => {
+                const match = genProgress.match(/Batch (\d+)\/(\d+)/);
+                const current = match ? parseInt(match[1]) : genProgress.includes('✅') ? 4 : 0;
+                const total = match ? parseInt(match[2]) : 4;
+                const pct = Math.round((current / total) * 100);
+                return (
+                  <div className="w-full bg-brand-200 rounded-full h-2">
+                    <div
+                      className="bg-brand-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={generating}
@@ -340,7 +421,7 @@ export default function AdminSubjectTestsPage() {
           >
             {generating
               ? testFormat === 'FULL_SUBJECT_TEST'
-                ? '⏳ Generating 80 questions in 4 batches… (3–4 minutes)'
+                ? '⏳ Generating… do not close this tab'
                 : '⏳ Generating…'
               : `✨ Generate ${autoTopic}`}
           </button>

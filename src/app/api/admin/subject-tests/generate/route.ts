@@ -161,22 +161,59 @@ export async function POST(request: Request) {
       `[SUBJECT-GENERATE] FULL_SUBJECT_TEST | subject="${input.category}" | topic="${input.topic}" | diff="${input.difficulty}" | 80Q×80min`,
     );
 
-    const result = await generateSubjectTest(input, apiKey);
+    // ── Streaming response: keeps Cloudflare (100 s limit) alive by sending
+    // a progress chunk after each of the 4 OpenAI batches.  The full
+    // generation can take 2–4 min; without streaming, Cloudflare returns 524.
+    const encoder = new TextEncoder();
+    const stream = new TransformStream<Uint8Array, Uint8Array>();
+    const writer = stream.writable.getWriter();
 
-    if (!result.ok) {
-      console.error(`[SUBJECT-GENERATE] failed | stage=${result.stage} | ${result.error}`);
-      const httpStatus = result.stage === 'AI_CALL' ? 502 : 500;
-      return NextResponse.json({ error: result.error }, { status: httpStatus });
-    }
+    const send = (obj: Record<string, unknown>) =>
+      writer.write(encoder.encode(JSON.stringify(obj) + '\n'));
 
-    console.log(`[SUBJECT-GENERATE] FULL success | testId=${result.testId} | ${result.generationMs}ms`);
-    return NextResponse.json({
-      testId: result.testId,
-      status: 'GENERATED',
-      slug: result.slug,
-      format: 'FULL_SUBJECT_TEST',
-      totalQuestions: 80,
-      generationMs: result.generationMs,
+    // Fire-and-forget inside the same request lifecycle — Node.js keeps the
+    // connection open until the writer is closed.
+    void (async () => {
+      try {
+        await send({ stage: 'starting', totalBatches: 4 });
+
+        const result = await generateSubjectTest(input, apiKey, {
+          onBatchComplete: (batchNum, totalQuestions) => {
+            void send({ stage: 'batch_complete', batch: batchNum, totalBatches: 4, totalQuestions });
+          },
+        });
+
+        if (!result.ok) {
+          console.error(`[SUBJECT-GENERATE] failed | stage=${result.stage} | ${result.error}`);
+          await send({ stage: 'error', error: result.error, errorStage: result.stage });
+        } else {
+          console.log(`[SUBJECT-GENERATE] FULL success | testId=${result.testId} | ${result.generationMs}ms`);
+          await send({
+            stage: 'done',
+            testId: result.testId,
+            status: 'GENERATED',
+            slug: result.slug,
+            format: 'FULL_SUBJECT_TEST',
+            totalQuestions: 80,
+            generationMs: result.generationMs,
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unexpected error';
+        console.error(`[SUBJECT-GENERATE] unexpected | ${msg}`);
+        await send({ stage: 'error', error: msg });
+      } finally {
+        await writer.close();
+      }
+    })();
+
+    return new Response(stream.readable, {
+      headers: {
+        'Content-Type': 'application/x-ndjson',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no', // disable Nginx/proxy buffering
+      },
     });
   }
 

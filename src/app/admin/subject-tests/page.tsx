@@ -56,6 +56,9 @@ export default function AdminSubjectTestsPage() {
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [genProgress, setGenProgress] = useState<string | null>(null);
+  // PDF mode
+  const [pdfMode, setPdfMode] = useState(false);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
@@ -184,6 +187,65 @@ export default function AdminSubjectTestsPage() {
     }
   }
 
+  async function handleGenerateFromPdf(e: React.FormEvent) {
+    e.preventDefault();
+    if (generating || !pdfFile) return;
+    setGenerating(true);
+    setGenError(null);
+    setGenProgress(null);
+    try {
+      const fd = new FormData();
+      fd.append('pdf', pdfFile);
+      fd.append('exam', 'BPSC TRE 4');
+      fd.append('category', subject);
+      fd.append('topic', autoTopic);
+      fd.append('difficulty', difficulty);
+      // PDF mode for subject-tests: use CUSTOM_PRACTICE sizing (25Q default for PDF)
+      const pdfQ = testFormat === 'FULL_SUBJECT_TEST' ? 25 : totalQuestions;
+      fd.append('totalQuestions', String(pdfQ));
+      fd.append('durationMinutes', String(pdfQ));
+
+      const res = await fetch('/api/admin/tests/generate-from-pdf', { method: 'POST', body: fd });
+      if (!res.ok || !res.body) {
+        let errMsg = `Server error (HTTP ${res.status}).`;
+        try { const d = await res.json() as { error?: string }; if (d.error) errMsg = d.error; } catch { /* ignore */ }
+        setGenError(errMsg); return;
+      }
+      const contentType = res.headers.get('Content-Type') ?? '';
+      if (contentType.includes('ndjson')) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = ''; let doneTestId: string | null = null;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n'); buffer = lines.pop() ?? '';
+          for (const line of lines) {
+            const trimmed = line.trim(); if (!trimmed) continue;
+            try {
+              const msg = JSON.parse(trimmed) as Record<string, unknown>;
+              if (msg.stage === 'starting') setGenProgress(`📄 Generating from PDF… (${msg.totalBatches as number} batches)`);
+              else if (msg.stage === 'batch_complete') setGenProgress(`Batch ${msg.batch as number}/${msg.totalBatches as number} — ${msg.totalQuestions as number} questions`);
+              else if (msg.stage === 'done') { doneTestId = msg.testId as string; setGenProgress('✅ PDF से questions generate हुए!'); }
+              else if (msg.stage === 'error') setGenError((msg.error as string | undefined) ?? 'Generation failed.');
+            } catch { /* skip */ }
+          }
+        }
+        if (doneTestId) { await new Promise<void>((r) => setTimeout(r, 600)); router.push(`/admin/tests/${doneTestId}`); }
+      } else {
+        const data = await res.json() as { testId?: string; error?: string };
+        if (!data.testId) { setGenError(data.error ?? 'Generation failed.'); return; }
+        router.push(`/admin/tests/${data.testId}`);
+      }
+    } catch {
+      setGenError('Request failed. Check your connection.');
+    } finally {
+      setGenerating(false);
+      setGenProgress(null);
+    }
+  }
+
   async function handleDelete(testId: string) {
     if (deleteId === testId) {
       try {
@@ -248,8 +310,26 @@ export default function AdminSubjectTestsPage() {
 
       {/* ─── Generate Form ───────────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <h2 className="text-lg font-bold text-slate-800 mb-5">Generate Subject Test Paper</h2>
-        <form onSubmit={(e) => { void handleGenerate(e); }} className="space-y-5">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-slate-800">Generate Subject Test Paper</h2>
+          <div className="inline-flex rounded-xl border border-slate-200 overflow-hidden text-sm font-semibold">
+            <button
+              type="button"
+              onClick={() => { setPdfMode(false); setPdfFile(null); }}
+              className={`px-4 py-2 transition-colors ${!pdfMode ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              ✨ AI Generate
+            </button>
+            <button
+              type="button"
+              onClick={() => setPdfMode(true)}
+              className={`px-4 py-2 transition-colors ${pdfMode ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'}`}
+            >
+              📄 From PDF
+            </button>
+          </div>
+        </div>
+        <form onSubmit={(e) => { pdfMode ? void handleGenerateFromPdf(e) : void handleGenerate(e); }} className="space-y-5">
 
           {/* Format selector */}
           <div>
@@ -383,6 +463,24 @@ export default function AdminSubjectTestsPage() {
             </div>
           )}
 
+          {/* PDF upload — shown only in PDF mode */}
+          {pdfMode && (
+            <div className="rounded-xl border-2 border-dashed border-amber-300 bg-amber-50 p-5">
+              <label className="block text-sm font-semibold text-amber-800 mb-2">📄 Upload PDF</label>
+              <p className="text-xs text-amber-700 mb-3">
+                Questions will be grounded in the PDF content. Subject selector sets the category/topic label.
+                Use a text-based PDF (not scanned).
+              </p>
+              <input
+                type="file"
+                accept="application/pdf"
+                onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm text-slate-700 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-amber-100 file:text-amber-800 hover:file:bg-amber-200 cursor-pointer"
+              />
+              {pdfFile && <p className="text-xs text-amber-700 mt-2">✅ {pdfFile.name} ({(pdfFile.size / 1024).toFixed(0)} KB)</p>}
+            </div>
+          )}
+
           {genError && (
             <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
               {genError}
@@ -416,14 +514,14 @@ export default function AdminSubjectTestsPage() {
 
           <button
             type="submit"
-            disabled={generating}
-            className="w-full bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white font-bold py-3 rounded-xl transition-colors"
+            disabled={generating || (pdfMode && !pdfFile)}
+            className={`w-full font-bold py-3 rounded-xl transition-colors disabled:opacity-50 text-white ${pdfMode ? 'bg-amber-500 hover:bg-amber-600' : 'bg-brand-600 hover:bg-brand-700'}`}
           >
             {generating
-              ? testFormat === 'FULL_SUBJECT_TEST'
-                ? '⏳ Generating… do not close this tab'
-                : '⏳ Generating…'
-              : `✨ Generate ${autoTopic}`}
+              ? '⏳ Generating… do not close this tab'
+              : pdfMode
+                ? pdfFile ? `📄 Generate ${autoTopic} from PDF` : '📄 Upload a PDF first'
+                : `✨ Generate ${autoTopic}`}
           </button>
         </form>
       </div>

@@ -15,7 +15,7 @@
  * Server-side only. Never exposed to the browser.
  */
 
-import type { GenerateTestInput } from '@/types/generated-test';
+import type { GenerateTestInput, GeneratedDifficulty } from '@/types/generated-test';
 
 // ─── Distribution by difficulty ───────────────────────────────────────────────
 
@@ -465,6 +465,95 @@ export function buildCustomBatchUserPrompt(
   ];
 
   return lines.join('\n');
+}
+
+// ─── PDF-grounded question generation prompt ──────────────────────────────────
+
+/**
+ * Build a user prompt for generating questions strictly from extracted PDF content.
+ *
+ * Unlike the regular prompt (which draws on OpenAI's general knowledge), this
+ * prompt instructs the model to ground every question in the supplied source text.
+ * Questions that cannot be answered from the text should not be generated.
+ *
+ * @param pdfText   Extracted plain text from the PDF (may be truncated to fit token budget)
+ * @param totalQ    Number of questions to generate
+ * @param category  Exam category / subject label
+ * @param topic     Admin-provided topic label (shown in question metadata)
+ * @param exam      Exam name (e.g. 'BPSC TRE 4')
+ * @param difficulty Difficulty level
+ */
+export function buildPdfContextPrompt(
+  pdfText: string,
+  totalQ: number,
+  category: string,
+  topic: string,
+  exam: string,
+  difficulty: string,
+): string {
+  const difficultyNote =
+    DIFFICULTY_INSTRUCTIONS[difficulty] ?? DIFFICULTY_INSTRUCTIONS.Moderate;
+  const dist = computeDistribution(difficulty as GeneratedDifficulty, totalQ);
+  const distStr = formatDistribution(dist);
+
+  return [
+    `Generate exactly ${totalQ} unique bilingual MCQ questions for a BPSC TRE 4 practice test.`,
+    `All questions MUST be grounded in the following source material.`,
+    `Do NOT draw on general knowledge outside this text.`,
+    `Each question must be answerable using only the content below.`,
+    '',
+    `Exam: ${exam}`,
+    `Category: ${category}`,
+    `Topic: ${topic}`,
+    `Difficulty: ${difficulty}`,
+    `Difficulty guidance: ${difficultyNote}`,
+    '',
+    '═══════════════════════════════════════════',
+    'SOURCE MATERIAL (PDF CONTENT — base all questions on this)',
+    '═══════════════════════════════════════════',
+    pdfText,
+    '',
+    '═══════════════════════════════════════════',
+    'REQUIRED QUESTION TYPE DISTRIBUTION',
+    '═══════════════════════════════════════════',
+    distStr,
+    '',
+    `IMPORTANT: Total must equal exactly ${totalQ}. Do NOT repeat the same question type more than 3 times in a row.`,
+    '',
+    FORMAT_GUIDE,
+    '',
+    '═══════════════════════════════════════════',
+    'JSON SCHEMA (return ONLY this, no other text)',
+    '═══════════════════════════════════════════',
+    `{
+  "titleHi": "<Hindi title — 6 to 12 words>",
+  "titleEn": "<English title — 5 to 10 words>",
+  "questions": [
+    {
+      "order": 1,
+      "category": "<sub-category tag>",
+      "topic": "${topic}",
+      "difficulty": "<Beginner | Easy | Moderate | Hard | Very Hard>",
+      "questionType": "<DIRECT | STATEMENT | QUOTE_ATTRIBUTION | CHRONOLOGY | MATCHING | ASSERTION_REASON>",
+      "questionHi": "<Hindi question text>",
+      "optionAHi": "<Hindi option A>",
+      "optionBHi": "<Hindi option B>",
+      "optionCHi": "<Hindi option C>",
+      "optionDHi": "<Hindi option D>",
+      "explanationHi": "<Hindi explanation referencing the source text>",
+      "questionEn": "<English question text>",
+      "optionAEn": "<English option A>",
+      "optionBEn": "<English option B>",
+      "optionCEn": "<English option C>",
+      "optionDEn": "<English option D>",
+      "explanationEn": "<English explanation referencing the source text>",
+      "correctOption": "A"
+    }
+  ]
+}`,
+    '',
+    `Generate all ${totalQ} questions now, grounded in the source material above.`,
+  ].join('\n');
 }
 
 // ─── Export utilities for tests ───────────────────────────────────────────────

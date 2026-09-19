@@ -178,8 +178,9 @@ export async function POST(request: Request) {
         await tx.generatedTest.update({
           where: { id: testId },
           data: {
-            titleHi: aiResult.titleHi?.trim() || `${topic} — PDF अभ्यास प्रश्नपत्र`,
-            titleEn: aiResult.titleEn?.trim() || `${topic} — PDF Practice Paper`,
+            // Always preserve admin-entered topic name — do NOT use AI-generated titles
+            titleHi: `${topic} — PDF अभ्यास प्रश्नपत्र`,
+            titleEn: `${topic} — PDF Practice Paper`,
             totalQuestions: actualCount,         // update to actual extracted count
             durationMinutes: actualCount,        // 1 min per question
             status: 'GENERATED',
